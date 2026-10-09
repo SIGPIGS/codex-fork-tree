@@ -1,6 +1,6 @@
 # 06 — Algorithms
 
-This document covers how codex-fork-tree turns rollout files into the framed trie on screen. Every rule here was checked against the 317 real rollouts in `~/.codex` (745 MB, Codex 0.104 to 0.161, checked 2026-10-09). `prototype/forktree.py` is a stdlib-only reference implementation of the whole pipeline; see [Validation](#12-validation-on-real-data).
+This document covers how codex-fork-tree turns rollout files into the fork tree on screen. Every rule here was checked against the 317 real rollouts in `~/.codex` (745 MB, Codex 0.104 to 0.161, checked 2026-10-09). `prototype/forktree.py` is a stdlib-only reference implementation of the whole pipeline; see [Validation](#12-validation-on-real-data).
 
 ```
 rollout files ──parse──▶ turn logs ──fingerprint──▶ prefix index ─┐
@@ -143,26 +143,23 @@ This matches the spec's "sessions sharing a nonempty history prefix". Every edge
 3. then closure over edges to get the tree
 
 
-## 7. Tree → framed trie rows
+## 7. Tree → outline rows
 
 ```
-render(s, from_k, W):
-    kids = visible children of s
-    if kids is empty or s is folded or W < 30:  → one leaf row
-    top    = ┬ "▣ title" … "+(len(eff(s)) − from_k) · age"
-    for k in sorted distinct fork points of kids:
-        row "◆ turn k “prompt of turn k”"   "+(k − previous k) turns"
-        for c in kids with fork point k, ordered by created:
-            connector = ├ or └ (└ only for the very last branch of the frame)
-            render(c, k, W − 6), with its first row prefixed by the connector and
-                                 later rows by "│ " (or "  " after └)
-    bottom = "ends at turn len(eff(s))"
+walk(s, prefix, conn, cont):
+    row  prefix ++ conn ++ marker(s) ++ title(s) [++ "▸ +N" if folded]      right: "+own · age"
+    if s has a parent edge (p, k):
+        info row  prefix ++ cont ++ ("│" if s shows children) ++ "   turn k · “prompt of turn k”"
+    for each visible child c (ordered by fork point k, then creation time):
+        walk(c, prefix ++ cont, "├─" or "└─" (dashed "├┄" when inferred), "│ " or "  ")
+        comfortable density: a spacer row "prefix ++ cont ++ │" between siblings
 ```
 
-- **Width** is measured in terminal cells, not characters: CJK and other East Asian wide characters count as 2. Ambiguous-width characters (`…`, `“`, `◆`) count as 1, as in default terminal settings. Truncation never splits a wide character. The prototype's output measures exactly W cells per line on mixed Chinese and English trees.
-- **Row model:** `{key, parentKey, kind: frame|fork|leaf|border, session?, forkPoint?, cells}`. Navigation (`j`/`k`/`h`/`l`/`[`/`]`) uses only `key` and `parentKey`. Border rows are not selectable.
-- **Stable order:** fork points sort by `k`, and branches at the same point sort by creation time. New sessions almost always sort last, so they appear without moving existing rows.
-- **Viewport anchoring:** after any rebuild (data update or resize), find the selected key's new row index and adjust scroll so it stays at the same screen line, clamped to the viewport.
+- **Width** is measured in terminal cells, not characters: CJK and other East Asian wide characters count as 2. Ambiguous-width characters (`…`, `“`, `●`) count as 1, as in default terminal settings. Truncation never splits a wide character. Every session row is padded to the pane width minus one, so the `+N · age` column lines up.
+- **Focus path:** guides and connectors on the path from the root to the focus use the accent role: a child's connector when it is on the path, and a parent's vertical guide while an on-path child is still below.
+- **Row model:** `{key?, parentKey?, session?, cells}`. Only session rows have a key; fork info and spacer rows don't, so navigation (`j`/`k`/`h`/`l`/`[`/`]`) skips them.
+- **Stable order:** children sort by fork point `k`, then creation time. New sessions almost always sort last, so they appear without moving existing rows.
+- **Viewport anchoring:** after any rebuild (data update or resize), find the selected key's new row index and adjust scroll so it stays visible.
 - **Titles:** `thread_name`, otherwise the first own prompt. Forks **inherit their parent's thread name** (seen in real data: three sessions in one tree carried the same name). When siblings or a parent and child share a title, append the first own prompt in `dim` color: `Implement WAL replay · “Start stage 2 with checksums…”`.
 
 ## 8. Project cache
@@ -241,7 +238,7 @@ Running `python3 -I prototype/forktree.py` with no argument lists the trees; wit
 | Fork trees found | 4, in 3 projects, with 2–5 sessions each |
 | Inferred edges | 0. Every real fork here carries native metadata; inference matters only for Codex older than about 0.142 |
 | Coincidental matches (same prompt, same reply, no burst) | rejected (the "hello" pair) |
-| Ordinal-reference chain, Codex 0.160 (fork of a fork) | rendered as a nested frame with correct fork points |
+| Ordinal-reference chain, Codex 0.160 (fork of a fork) | rendered two levels deep with correct fork points |
 | Implicit-cut forks (Codex 0.147, 3 of them) | attached at the correct fork points |
 | Inherited thread names | 3 sessions in one tree shared one name, which motivates the title disambiguation rule (§7) |
 | Line widths with mixed CJK and English | every line exactly W cells at 60, 80 and 96 columns |
@@ -256,4 +253,4 @@ Running `python3 -I prototype/forktree.py` with no argument lists the trees; wit
 | Cold-scan speed | best | measured 1.8 s, fine with the cache |
 | Iteration speed | slower | fastest; the prototype is already Python |
 
-**Chosen and implemented: Rust with ratatui** (2026-10-09). The tool ships next to Codex as one binary, and the framed-trie renderer is a small amount of custom cell-level drawing, which ratatui handles directly. Keep `prototype/forktree.py` as the **oracle**: generate golden outputs from it on synthetic fixtures (one per format, plus rollback, ordinal chain, burst fork and coincidental match) and check the Rust core against them.
+**Chosen and implemented: Rust with ratatui** (2026-10-09). The tool ships next to Codex as one binary, and the tree renderer is a small amount of custom cell-level drawing, which ratatui handles directly. Keep `prototype/forktree.py` as the **oracle**: generate golden outputs from it on synthetic fixtures (one per format, plus rollback, ordinal chain, burst fork and coincidental match) and check the Rust core against them.

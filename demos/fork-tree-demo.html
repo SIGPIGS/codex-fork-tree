@@ -10,9 +10,9 @@
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   /* terminal palettes */
   /* dark: Catppuccin Mocha base + neutrals, saturated role hues (orange 30°, green 95°, teal 178°, violet 270°, pink 330°) */
-  --td-bg: #1e1e2e; --td-fg: #cdd6f4; --td-dim: #7f849c; --td-accent: #ff9e44; --td-own: #9be05c; --td-live: #2ed9cf; --td-prompt: #c38bff; --td-inf: #ff6ab8; --td-warn: #ffd43b; --td-danger: #ff5555; --td-sel: #313244; --td-frame: #45475a;
+  --td-bg: #1e1e2e; --td-fg: #cdd6f4; --td-dim: #7f849c; --td-accent: #ff9e44; --td-own: #9be05c; --td-live: #2ed9cf; --td-prompt: #c38bff; --td-subtle: #a6adc8; --td-inf: #ff6ab8; --td-warn: #ffd43b; --td-danger: #ff5555; --td-sel: #313244; --td-frame: #45475a;
   /* light: Catppuccin Latte base + neutrals, same hues deepened for contrast on a light background */
-  --tl-bg: #eff1f5; --tl-fg: #4c4f69; --tl-dim: #7c7f93; --tl-accent: #d9480f; --tl-own: #2b8a3e; --tl-live: #0b7f8c; --tl-prompt: #7c3aed; --tl-inf: #c2255c; --tl-warn: #a66a00; --tl-danger: #e03131; --tl-sel: #dce0e8; --tl-frame: #bcc0cc;
+  --tl-bg: #eff1f5; --tl-fg: #4c4f69; --tl-dim: #7c7f93; --tl-accent: #d9480f; --tl-own: #2b8a3e; --tl-live: #0b7f8c; --tl-prompt: #7c3aed; --tl-subtle: #6c6f85; --tl-inf: #c2255c; --tl-warn: #a66a00; --tl-danger: #e03131; --tl-sel: #dce0e8; --tl-frame: #bcc0cc;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #11111b; --fg: #cdd6f4; --muted: #a6adc8; --line: #313244; --card: #181825; --accent: #fab387; --accent-ink: #fab387; --on-accent: #11111b; color-scheme: dark } }
@@ -37,8 +37,8 @@ h1 { font-size: 1.55rem; margin: 0; font-weight: 600; letter-spacing: -0.01em; t
 .term { display: block; box-sizing: border-box; width: 100%; max-width: 100%; min-width: 220px; min-height: 120px; resize: both; overflow: hidden; position: relative;
   font-family: var(--mono); font-size: 13.5px; line-height: 1.32; padding: 10px 12px; border-radius: 8px;
   background: var(--t-bg); color: var(--t-fg); border: 1px solid var(--t-frame); cursor: default; font-variant-ligatures: none; }
-.pal-dark { --t-bg: var(--td-bg); --t-fg: var(--td-fg); --t-dim: var(--td-dim); --t-accent: var(--td-accent); --t-inf: var(--td-inf); --t-live: var(--td-live); --t-warn: var(--td-warn); --t-danger: var(--td-danger); --t-own: var(--td-own); --t-prompt: var(--td-prompt); --t-sel: var(--td-sel); --t-frame: var(--td-frame); }
-.pal-light { --t-bg: var(--tl-bg); --t-fg: var(--tl-fg); --t-dim: var(--tl-dim); --t-accent: var(--tl-accent); --t-inf: var(--tl-inf); --t-live: var(--tl-live); --t-warn: var(--tl-warn); --t-danger: var(--tl-danger); --t-own: var(--tl-own); --t-prompt: var(--tl-prompt); --t-sel: var(--tl-sel); --t-frame: var(--tl-frame); }
+.pal-dark { --t-bg: var(--td-bg); --t-fg: var(--td-fg); --t-dim: var(--td-dim); --t-accent: var(--td-accent); --t-inf: var(--td-inf); --t-live: var(--td-live); --t-warn: var(--td-warn); --t-danger: var(--td-danger); --t-own: var(--td-own); --t-prompt: var(--td-prompt); --t-subtle: var(--td-subtle); --t-sel: var(--td-sel); --t-frame: var(--td-frame); }
+.pal-light { --t-bg: var(--tl-bg); --t-fg: var(--tl-fg); --t-dim: var(--tl-dim); --t-accent: var(--tl-accent); --t-inf: var(--tl-inf); --t-live: var(--tl-live); --t-warn: var(--tl-warn); --t-danger: var(--tl-danger); --t-own: var(--tl-own); --t-prompt: var(--tl-prompt); --t-subtle: var(--tl-subtle); --t-sel: var(--tl-sel); --t-frame: var(--tl-frame); }
 .ln { white-space: pre; height: 1.32em; }
 .measure { position: absolute; visibility: hidden; white-space: pre; }
 .size { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -47,7 +47,7 @@ h1 { font-size: 1.55rem; margin: 0; font-weight: 600; letter-spacing: -0.01em; t
 /* every non-ASCII glyph is pinned to one cell: the webfont lacks box drawing, so fallback fonts would otherwise drift */
 .g { display: inline-block; width: 1ch; text-align: center; overflow: visible; white-space: pre; }
 .ln { overflow: hidden; }
-.c-dim { color: var(--t-dim); } .c-acc { color: var(--t-accent); } .c-inf { color: var(--t-inf); } .c-live { color: var(--t-live); } .c-own { color: var(--t-own); } .c-prompt { color: var(--t-prompt); }
+.c-dim { color: var(--t-dim); } .c-acc { color: var(--t-accent); } .c-inf { color: var(--t-inf); } .c-live { color: var(--t-live); } .c-own { color: var(--t-own); } .c-prompt { color: var(--t-prompt); } .c-subtle { color: var(--t-subtle); }
 .c-warn { color: var(--t-warn); } .c-danger { color: var(--t-danger); } .b { font-weight: 700; }
 .sel { background: var(--t-sel); }
 .hit { cursor: pointer; }
@@ -77,15 +77,17 @@ h1 { font-size: 1.55rem; margin: 0; font-weight: 600; letter-spacing: -0.01em; t
 <div class="wrap">
   <header>
     <h1>codex-fork-tree · UI demos</h1>
-    <p class="lede">The framed trie (D) combines the turn trie and the outline. Each session with forks becomes a frame titled with its name. The frame's own session is marked ▣ in green, while forked sessions are ○ in the normal text color. Inside a frame, the session's fork points (◆ turn N) run down in turn order, and every branch forked from that session hangs off them. A and C are kept for comparison. The layout adapts to whatever size the terminal is. Click the terminal or just start typing: <code>j</code>/<code>k</code> move, <code>h</code>/<code>l</code> fold and unfold a frame, <code>Enter</code> opens the transcript, <code>v</code> cycles layouts, <code>?</code> lists every key. All sessions and prompts are made-up examples.</p>
+    <p class="lede">Layout E drops the frames. It is an outline of sessions; under each forked session, an indented line shows the turn and prompt it forked after. A right-aligned column shows each session's own turns and age. The path from the root down to the focus session is drawn in the accent color. Click the terminal or just start typing: <code>j</code>/<code>k</code> move, <code>h</code>/<code>l</code> fold, <code>Enter</code> opens the transcript, <code>=</code> switches density, <code>v</code> compares with the framed layout D, and <code>?</code> lists every key. All sessions and prompts are made-up examples.</p>
   </header>
 
   <div class="controls">
     <div class="ctl"><span>Layout</span><div class="seg" data-ctl="layout">
-      <button id="l-D" data-v="D">D · Framed trie</button><button id="l-A" data-v="A">A · Outline</button><button id="l-C" data-v="C">C · Turn trie</button></div></div>
+      <button id="l-E" data-v="E">E · Outline + fork info</button><button id="l-D" data-v="D">D · Framed trie</button></div></div>
     <div class="ctl"><span>Size</span><div class="seg" data-ctl="size">
       <button id="z-fit" data-v="fit">fit</button><button id="z-120" data-v="120x30">120×30</button><button id="z-88" data-v="88x30">88×30</button><button id="z-56" data-v="56x24">56×24</button></div>
       <span class="size" id="size-readout" aria-live="polite">–</span></div>
+    <div class="ctl"><span>Density</span><div class="seg" data-ctl="density">
+      <button id="d-c" data-v="comfortable">comfortable</button><button id="d-k" data-v="compact">compact</button></div></div>
     <div class="ctl"><span>Terminal</span><div class="seg" data-ctl="theme">
       <button id="t-dark" data-v="dark">Mocha</button><button id="t-light" data-v="light">Latte</button></div></div>
   </div>
@@ -95,9 +97,9 @@ h1 { font-size: 1.55rem; margin: 0; font-weight: 600; letter-spacing: -0.01em; t
 
   <div id="legend" class="legend pal-dark" aria-label="Color legend">
     <span class="c-acc">● ▣ ┏━┓ focus</span>
-    <span class="c-own">▣ frame owner</span>
+    <span class="c-own b">▣ frame owner</span>
     <span>○ forked session</span>
-    <span class="c-prompt">◆ fork point “prompt”</span>
+    <span><span class="c-prompt">◆ turn 9</span> <span class="c-subtle">“shared prompt”</span></span>
     <span class="c-inf">┄ ≈ inferred</span>
     <span class="c-live">◉ live</span>
     <span class="c-dim">+16 · 6d metadata</span>
@@ -114,26 +116,22 @@ h1 { font-size: 1.55rem; margin: 0; font-weight: 600; letter-spacing: -0.01em; t
   </div>
 
   <section class="notes">
-    <article class="note pick" id="n-D"><div class="tag">Proposed default</div>
-      <h3>D · Framed trie <small>trie inside session frames</small></h3>
-      <p>A frame is one session that has forks. Its top border carries the session's name and length. Inside, a spine lists the session's fork points in turn order, each labeled with the last shared prompt, and the branches hang off each ◆. A branch that has forks of its own becomes a nested frame. The bottom border marks where the session ends.</p>
-      <ul><li>All branches that share a parent session sit inside one box</li><li>Where each fork happened stays visible (◆ with its prompt)</li><li>▣ in green marks the frame's own session; ○ marks a forked session; ● marks the focus session when it's a leaf</li><li>Borders: heavy and accent-colored for the focus session, dashed for inferred forks, thin and dim otherwise</li><li>Each nested frame costs 2 rows and about 6 columns</li></ul></article>
-    <article class="note" id="n-A">
-      <h3>A · Outline <small>reference</small></h3>
-      <p>One row per session, indented under its parent session. The densest layout, but fork points only show as numbers.</p></article>
-    <article class="note" id="n-C">
-      <h3>C · Turn trie <small>reference</small></h3>
-      <p>Fork points as nodes and sessions as leaves. D keeps this structure and adds frames for sessions, so you no longer have to find a session's title at the end of its path.</p></article>
+    <article class="note pick" id="n-E"><div class="tag">Proposed default</div>
+      <h3>E · Outline + fork info <small>no frames</small></h3>
+      <p>Each session is one row, indented under the session it was forked from. The line right below a forked session says where it split off: <code>turn 9 · “the last shared prompt”</code>. Every row spans the full pane width, so <code>+N · age</code> lines up in one column.</p>
+      <ul><li>▣ (bold green) marks a session that has forks; ○ marks one that doesn't</li><li>Focus: ● and the title in accent orange, and the tree lines leading down to it are drawn in accent too</li><li>Comfortable density adds a guide-only row between siblings; <code>=</code> switches to compact</li><li>Costs 2 columns per nesting level, with no right-hand border</li></ul></article>
+    <article class="note" id="n-D">
+      <h3>D · Framed trie <small>previous proposal</small></h3>
+      <p>Each session that has forks drawn as a box, with fork points listed inside it. Kept here for comparison.</p></article>
   </section>
 
   <section class="decide">
     <h2>Decisions for you</h2>
     <ol>
-      <li>Frame borders: full boxes (shown), or only a top label and a left rail to save the right margin and the bottom row. <em>Full boxes are clearer; a rail saves about 6 columns per nesting level.</em></li>
-      <li>Leaf sessions (no forks of their own) stay as plain rows instead of 1-row frames. <em>Suggested: keep them as rows.</em></li>
-      <li>Off-path frames start folded (see “Rewrite compaction ▸ +1”). Should they start expanded instead?</li>
-      <li>Should the bottom border show where the session ends (“ends at turn 64”, shown) or its last prompt?</li>
-      <li>Inferred forks appear dashed after verification. Should they be hidden until you confirm them with <code>x</code>?</li>
+      <li>Fork info line: <code>turn 9 · “prompt”</code> under every forked session (shown), or only when it differs from the previous sibling's?</li>
+      <li>Focus: accent path plus accent title (shown). Would you also like a full-row tint on the focus row when the cursor is elsewhere?</li>
+      <li>Sessions with forks off the focus path start folded (see “Rewrite compaction ▸ +1”). Should they start expanded?</li>
+      <li>Inferred forks appear with dashed connectors after verification. Should they stay hidden until you confirm them with <code>x</code>?</li>
     </ol>
   </section>
 </div>
@@ -170,7 +168,7 @@ const byK = Object.fromEntries(SESS.map(s => [s.k, s]));
 const FOCUS0 = 'bf7e5086';
 
 const st = {
-  layout:'D', width:120, theme:'dark', ascii:false, focus:FOCUS0, selKey:'s:'+FOCUS0,
+  layout:'E', width:120, compact:false, theme:'dark', ascii:false, focus:FOCUS0, selKey:'s:'+FOCUS0,
   collapsed:new Set(), show:{arch:false, inf:true}, confirmed:new Set(), rejected:new Set(),
   overlay:null, tScroll:0, toast:'', toastUntil:0, verifying:true, spin:0, fresh:new Map(), lastG:0, scroll:0, focused:false,
 };
@@ -342,35 +340,90 @@ function rowsD(w) {
   function frame(s, from, FW, parentKey) {
     const bx = box(s), key = 's:' + s.k, rows = [];
     const lab = meta(s, from), labLen = lab.reduce((n, x) => n + len(x.t), 0);
-    const tMax = Math.max(4, FW - 11 - labLen);
-    const title = fit([S(s.title, s.k === st.focus ? 'c-own b' : 'c-own')], Math.min(len(s.title), tMax));
-    const fill = FW - 10 - Math.min(len(s.title), tMax) - labLen;
-    rows.push({ key, s, parentKey, segs: [S(bx.tl + bx.h + ' ', bx.c), ownerMark(s), S(' '), ...title, S(' ' + bx.h.repeat(Math.max(1, fill)) + ' ', bx.c), ...lab, S(' ' + bx.h + bx.tr, bx.c)] });
-    const IW = FW - 4, inner = [];
+    // "╭ ▣ title ─…─ meta ─╮": the owner sits 2 columns left of its contents
+    const tMax = Math.max(4, FW - 10 - labLen);
+    const title = fit([S(s.title, 'c-own b')], Math.min(len(s.title), tMax));
+    const fill = FW - 9 - Math.min(len(s.title), tMax) - labLen;
+    rows.push({ key, s, parentKey, segs: [S(bx.tl + ' ', bx.c), ownerMark(s), S(' '), ...title, S(' ' + bx.h.repeat(Math.max(1, fill)) + ' ', bx.c), ...lab, S(' ' + bx.h + bx.tr, bx.c)] });
+    const IW = FW - 6, inner = [];
+    const spacer = spine => ({ border: true, segs: fit([S(spine ? '│' : ' ', 'c-dim')], IW) });
     const ks = kids(s).filter(c => c.fork > from);
     const forks = [...new Set(ks.map(c => c.fork))].sort((a, b) => a - b);
     let prev = from;
     forks.forEach((t, fi) => {
       const fk = 'f:' + s.k + ':' + t;
       inner.push({ key: fk, fork: { s, t, from: prev }, parentKey: key,
-        segs: lr([S('◆ ', 'c-prompt'), S('turn ' + t + ' ', 'c-dim'), S(q(prompt(s, t)), 'c-prompt')], [S('+' + (t - prev) + ' turns', 'c-dim')], IW) });
+        segs: lr([S('◆ ', 'c-prompt'), S('turn ' + t + ' ', 'c-prompt'), S(q(prompt(s, t)), 'c-subtle')], [S('+' + (t - prev) + ' turn' + (t - prev === 1 ? '' : 's'), 'c-dim')], IW) });
       prev = t;
       const br = ks.filter(c => c.fork === t);
       br.forEach((b, j) => {
         const last = fi === forks.length - 1 && j === br.length - 1;
         const conn = (last ? '└' : '├') + edgeCh(b), cls = edgeCls(b), cont = last ? '  ' : '│ ';
         // too narrow for another frame: fold it into a leaf row
-        if (framed(b) && IW - 2 >= 30) frame(b, t, IW - 2, fk).forEach((r, i) => inner.push({ ...r, segs: [S(i ? cont : conn, i ? 'c-dim' : cls), ...r.segs] }));
+        const nested = framed(b) && IW - 2 >= 30;
+        if (nested) frame(b, t, IW - 2, fk).forEach((r, i) => inner.push({ ...r, segs: [S(i ? cont : conn, i ? 'c-dim' : cls), ...r.segs] }));
         else inner.push(leaf(b, t, IW, conn, cls, fk));
+        // comfortable density: air after a nested frame when its group continues
+        if (!st.compact && nested && j < br.length - 1) inner.push(spacer(true));
       });
+      // comfortable density: air between fork-point groups; the spine keeps running
+      if (!st.compact && fi < forks.length - 1) inner.push(spacer(true));
     });
-    inner.forEach(r => rows.push({ ...r, segs: [S(bx.v + ' ', bx.c), ...r.segs, S(' ' + bx.v, bx.c)] }));
+    inner.forEach(r => rows.push({ ...r, segs: [S(bx.v + '   ', bx.c), ...r.segs, S(' ' + bx.v, bx.c)] }));
     const end = ' ends at turn ' + s.turns + ' ';
     rows.push({ border: true, segs: [S(bx.bl + bx.h.repeat(Math.max(1, FW - 3 - len(end))), bx.c), S(end, 'c-dim'), S(bx.h + bx.br, bx.c)] });
     return rows;
   }
   // one column of air between the outer frame and the pane divider
   return (framed(root) ? frame(root, 0, w - 1, null) : [leaf(root, 0, w - 1, '', '', null)]).map(r => ({ ...r, segs: [...r.segs, S(' ')] }));
+}
+
+function rowsE(w0) {
+  const w = w0 - 1; // one column of air before the pane divider
+  const rows = [];
+  const q = t => '“' + t + '”';
+  const onPath = new Set(); for (let x = byK[st.focus]; x; x = byK[x.parent]) onPath.add(x.k);
+  const meta = (s, from) => [...(prov(s) === 'inferred' ? [S('≈ ', 'c-inf')] : []), S('+' + own(s, from), 'c-dim'), S(' · ', 'c-dim'), S(rel(s.created).padStart(3), 'c-dim')];
+  const open = s => kids(s).length > 0 && !st.collapsed.has(s.k);
+  function mark(s, owner) {
+    if (s.k === st.focus) return S('●', 'c-acc b');
+    if (s.live) return S('◉', 'c-live');
+    if (s.archived) return S('◌', 'c-dim');
+    return owner ? S('▣', 'c-own') : S('○');
+  }
+  function titleCls(s, owner) {
+    if (s.k === st.focus) return 'c-acc b';
+    if (st.fresh.has(s.k)) return 'c-live';
+    if (s.archived) return 'c-dim';
+    return owner ? 'c-own b' : '';
+  }
+  // prefix: guide segments for this node's column; conn/cont: this node's connector and its continuation
+  function walk(s, prefix, conn, cont, parentKey) {
+    const ks = open(s) ? kids(s) : [];
+    const owner = kids(s).length > 0;
+    const left = [...prefix, ...(conn ? [conn] : []), mark(s, owner), S(' '), S(s.title, titleCls(s, owner))];
+    const folded = !open(s) && descCount(s);
+    if (folded) left.push(S(' ▸ +' + folded, 'c-dim'));
+    rows.push({ key: 's:' + s.k, s, parentKey, segs: lr(left, meta(s, s.parent ? s.fork : 0), w) });
+    const desc = cont ? [...prefix, cont] : prefix;
+    const pathIdx = ks.findIndex(c => onPath.has(c.k));
+    const down = (on) => S(ks.length ? '│' : ' ', on ? 'c-acc' : 'c-dim');
+    // fork info sits under the title, indented past it
+    if (s.parent) {
+      const p = byK[s.parent];
+      rows.push({ border: true, segs: fit([...desc, down(pathIdx >= 0), S('   '), S('turn ' + s.fork, 'c-prompt'), S(' · ', 'c-dim'), S(q(prompt(p, s.fork)), 'c-subtle')], w) });
+    }
+    ks.forEach((c, i) => {
+      const last = i === ks.length - 1;
+      const onC = i === pathIdx, before = i < pathIdx;
+      const cConn = S((last ? '└' : '├') + edgeCh(c), onC ? 'c-acc' : edgeCls(c));
+      const cCont = S(last ? '  ' : '│ ', before ? 'c-acc' : 'c-dim');
+      walk(c, desc, cConn, cCont, 's:' + s.k);
+      if (!st.compact && !last) rows.push({ border: true, segs: fit([...desc, S('│', before ? 'c-acc' : 'c-dim')], w) });
+    });
+  }
+  walk(root, [], null, null, null);
+  return rows.map(r => ({ ...r, segs: [...r.segs, S(' ')] }));
 }
 
 // ---------- details ----------
@@ -394,7 +447,7 @@ function details(row, w) {
     return L;
   }
   const s = row.s, p = byK[s.parent];
-  const badge = s.k === st.focus ? S((lastRows.some(r => r.key === 's:' + s.k) && st.layout === 'D' && kids(s).length && !st.collapsed.has(s.k) ? '▣' : '●') + ' focus', 'c-acc') : s.live ? S('◉ live', 'c-live') : s.archived ? S('◌ archived', 'c-dim') : s.sub ? S('↳ subagent', 'c-dim') : S('');
+  const badge = s.k === st.focus ? S((lastRows.some(r => r.key === 's:' + s.k) && (st.layout === 'D') && kids(s).length && !st.collapsed.has(s.k) ? '▣' : '●') + ' focus', 'c-acc') : s.live ? S('◉ live', 'c-live') : s.archived ? S('◌ archived', 'c-dim') : s.sub ? S('↳ subagent', 'c-dim') : S('');
   L.push(lr([S(s.title, 'b')], [badge], w));
   L.push(lr([S(s.id, 'c-dim')], [S(s.src + ' · ' + s.model, 'c-dim')], w));
   push([S(s.created.replace('T', ' ') + ' · ' + rel(s.created) + ' ago · ' + s.turns + ' turns · ' + s.tok + ' tok', 'c-dim')]);
@@ -456,7 +509,7 @@ const HELP = [
   ['j k ↑ ↓', 'move'], ['h l ← →', 'fold frame / parent · unfold / child'], ['[ ]', 'previous / next sibling'], ['gg G', 'first / last'], ['p F', 'parent · back to focus'],
   ['⏎ t', 'transcript (narrow: details first)'], ['r', 'resume in codex'], ['n', 'fork in codex'], ['f', 'make selected the focus'], ['m c', 'mark · compare'],
   ['a i', 'archived · inferred'], ['x X', 'confirm / reject inferred fork'], ['z Z', 'fold off-path · expand all'], ['R A D', 'rename · archive · delete'],
-  ['y Y', 'copy id · copy path'], ['/', 'search'], ['v', 'cycle layout'], ['Ctrl-r', 're-verify'], ['q esc', 'close / quit'],
+  ['y Y', 'copy id · copy path'], ['/', 'search'], ['=', 'comfortable / compact'], ['v', 'cycle layout'], ['Ctrl-r', 're-verify'], ['q esc', 'close / quit'],
 ];
 
 // ---------- compose screen ----------
@@ -484,7 +537,7 @@ function screen() {
   L.push([S('─'.repeat(W), 'c-dim')]);
   const bodyH = st.rows - L.length - 2;
   const narrow = W < 60, stacked = !narrow && W < 100;
-  const split = { A: 0.47, B: 0.6, C: 0.56, D: 0.6 }[st.layout];
+  const split = { A: 0.47, B: 0.6, C: 0.56, D: 0.6, E: 0.56 }[st.layout];
   const body = [];
 
   if (st.overlay === 'transcript' || st.overlay === 'help' || (st.overlay === 'details' && narrow)) {
@@ -506,7 +559,7 @@ function screen() {
   } else {
     const tw = narrow || stacked ? W : Math.floor((W - 1) * split);
     const dw = narrow ? 0 : stacked ? W : W - tw - 1;
-    const rows = st.layout === 'A' ? rowsA(tw) : st.layout === 'B' ? rowsB(tw) : st.layout === 'D' ? rowsD(tw) : rowsC(tw);
+    const rows = st.layout === 'E' ? rowsE(tw) : st.layout === 'A' ? rowsA(tw) : st.layout === 'B' ? rowsB(tw) : st.layout === 'D' ? rowsD(tw) : rowsC(tw);
     lastRows = rows.filter(r => !r.ruler && !r.border);
     if (!lastRows.some(r => r.key === st.selKey)) st.selKey = lastRows.find(r => r.key === 's:' + st.focus) ? 's:' + st.focus : lastRows[0].key;
     const treeH = narrow ? bodyH : stacked ? bodyH - Math.min(11, Math.floor(bodyH * 0.4)) : bodyH;
@@ -565,9 +618,9 @@ function render() {
     return '<div class="ln">' + l + (line.rest ? line.rest.map(segHTML).join('') : '') + '</div>';
   }).join('');
   document.getElementById('size-readout').textContent = st.width + ' × ' + st.rows;
-  for (const [ctl, v] of [['layout', st.layout], ['theme', st.theme]])
+  for (const [ctl, v] of [['layout', st.layout], ['theme', st.theme], ['density', st.compact ? 'compact' : 'comfortable']])
     document.querySelectorAll('[data-ctl="' + ctl + '"] button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
-  ['D', 'A', 'C'].forEach(x => document.getElementById('n-' + x).style.outline = st.layout === x ? '2px solid var(--accent)' : 'none');
+  ['E', 'D'].forEach(x => document.getElementById('n-' + x).style.outline = st.layout === x ? '2px solid var(--accent)' : 'none');
 }
 
 // ---------- actions ----------
@@ -617,7 +670,8 @@ function key(k, e) {
       const n = sib[i + (k === ']' ? 1 : -1)]; if (n) st.selKey = n.key; break; }
     case 'Enter': case 't': if (narrow && k === 'Enter') st.overlay = 'details'; else { st.overlay = 'transcript'; st.tScroll = 0; } break;
     case '?': st.overlay = 'help'; break;
-    case 'v': st.layout = { D: 'A', A: 'C', C: 'D', B: 'D' }[st.layout]; st.scroll = 0; break;
+    case '=': st.compact = !st.compact; break;
+    case 'v': st.layout = st.layout === 'E' ? 'D' : 'E'; st.scroll = 0; break;
     case 'f': if (s) { st.focus = s.k; st.selKey = 's:' + s.k; resetCollapse(); toast('focus → ' + s.k + ' (scope rebuilt)'); } break;
     case 'r': if (s) toast(s.live ? s.k + ' is live in another codex; resume anyway? (demo)' : 'would run: codex resume ' + s.k + '  (TUI suspends)'); break;
     case 'n': if (s) toast('would run: codex fork ' + s.k + ' → recorded edge'); break;
@@ -654,12 +708,12 @@ document.querySelectorAll('.keys button').forEach(b => b.addEventListener('click
 document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return; const v = b.dataset.v, c = seg.dataset.ctl;
   if (c === 'size') { setSize(v); return; }
-  if (c === 'layout') { st.layout = v; st.scroll = 0; } else if (c === 'theme') st.theme = v;
+  if (c === 'layout') { st.layout = v; st.scroll = 0; } else if (c === 'theme') st.theme = v; else if (c === 'density') st.compact = v === 'compact';
   try { localStorage.setItem('cft-demo3', JSON.stringify({ layout: st.layout, theme: st.theme })); } catch (_) {}
   render();
 }));
 try { const saved = JSON.parse(localStorage.getItem('cft-demo3') || 'null'); if (saved) Object.assign(st, { layout: saved.layout, theme: saved.theme }); } catch (_) {}
-if (!'DAC'.includes(st.layout)) st.layout = 'D';
+if (!'ED'.includes(st.layout)) st.layout = 'E';
 if (st.theme !== 'light') st.theme = 'dark';
 
 // ---------- terminal size: measured from the box, like SIGWINCH ----------

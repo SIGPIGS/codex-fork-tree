@@ -31,91 +31,58 @@ The UI runs full-screen in the terminal (alternate screen, restored on exit). **
 What scales with width:
 
 - Titles and prompts truncate with `…`. The right-hand metadata (`+N · age`) stays and the title gives way.
-- Frames nest until a nested frame would be narrower than 30 columns. From there it renders folded, as a leaf row with `▸ +N`.
+- Each nesting level costs 2 columns; titles and fork info truncate first, the `+N · age` column never moves.
 - The selected row stays in view after a resize, and the tree scrolls to keep it on screen.
 
-## Tree layout: framed trie (default)
+## Tree layout: outline with fork info
 
-The turn trie is the base, and session outlines are drawn on top of it. **Every session that has visible forks is drawn as a frame.** The frame groups all the branches that share it as their parent.
-
-```
-╭─ ▣ Design the storage engine ─────────────────────────── +38 ·  1w ─╮
-│ ◆ turn 3 “List what the engine needs from the file format… +3 turns │
-│ ├─○ Earlier attempt: direct port                          +84 ·  1w │
-│ ◆ turn 9 “Agreed on the format. Now plan the WAL work in … +6 turns │
-│ └─╭─ ▣ Implement WAL replay ────────────────────────── +55 ·  7d ─╮ │
-│   │ ◆ turn 11 “Stage 1 passes. Before stage 2, review t… +2 turns │ │
-│   │ ├─╭─ ▣ Rewrite compaction ────────────────────── +40 ·  7d ─╮ │ │
-│   │ │ │ ◆ turn 20 “Merging is still too slow. Can we … +9 turns │ │ │
-│   │ │ │ └─○ Compaction: try leveled                   +14 ·  6d │ │ │
-│   │ │ ╰─────────────────────────────────────── ends at turn 51 ─╯ │ │
-│   │ ◆ turn 14 “Run the crash-recovery tests and report … +3 turns │ │
-│   │ ├─○ Benchmark write stalls                          +16 ·  6d │ │
-│   │ └─┏━ ▣ Explain fsync ordering ━━━━━━━━━━━━━━━━━━ +36 ·  6d ━┓ │ │
-│   │   ┃ ◆ turn 19 “So the directory entry is not sync… +5 turns ┃ │ │
-│   │   ┃ └─○ fsync: batch alternative                   +4 · now ┃ │ │
-│   │   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ends at turn 50 ━┛ │ │
-│   ╰───────────────────────────────────────────── ends at turn 64 ─╯ │
-╰─────────────────────────────────────────────────── ends at turn 38 ─╯
-```
-
-Anatomy of a frame:
-
-| Part | Content | Selectable |
-|---|---|---|
-| top border | owner symbol `▣`, session title in the `own` color, `+N` own turns (turns after its fork point), age | yes, this row stands for the session |
-| spine `◆` rows | each fork point in turn order: `turn N`, the last shared prompt, and `+N turns` since the previous fork point | yes, details show the fork point and its branches |
-| branch rows | `├─`/`└─` off the spine; a leaf session is one row, and a session with forks of its own is a nested frame | yes |
-| bottom border | `ends at turn N`: where the session's own history stops | no |
-
-Rules:
-
-- A leaf session (no visible forks) is a plain row, never a one-row frame.
-- **The frame's own session and its forked sessions never look alike.** The owner's title row starts with `▣`, and both the symbol and the title use the `own` color (green). Forked sessions start with `○` (or `●` `◉` `◌` `↳`) in the normal text color. When the focus session owns a frame, its `▣` is accent-colored and its title is bold.
-- Turns are always spelled out: `turn 14`, `ends at turn 38`, `forked after turn 19`. The bare `t14` form is not used.
-- Borders show which session they belong to: **heavy and accent-colored** (`┏━┓┃┗┛`) for the focus session, **dashed and inferred-colored** (`╭┄╮┆╰┄╯`) when the frame's own edge to its parent is inferred, and **thin and dim** (`╭─╮│╰─╯`) otherwise.
-- Folding (`h`) collapses a frame to a single leaf row with `▸ +N`. Frames that are not on the path to the focus session start folded.
-- Each nesting level costs 6 columns (2 for the branch connector, 4 for the frame's borders and padding) and 2 rows. A nested frame narrower than 30 columns is rendered folded (see [Layout](#layout)).
-- Leave one column of space between the outer frame and the pane divider.
-
-Layouts A (outline) and C (plain turn trie) stay in the demo as references. A is a candidate fallback for very deep trees.
-
-## Tree rows (outline layout A)
-
-Each row has one session per line and up to four fields, aligned in columns:
+Earlier rounds used framed boxes; they were dropped because boxes kept the right-hand metadata from lining up and made a title look more indented than its own contents. The tree is now an outline:
 
 ```
-<guides><marker> <title…>                          <fork label>  <age>
+▣ Design the storage engine                                   +38 ·  1w
+├─○ Earlier attempt: direct port                              +84 ·  1w
+│     turn 3 · “List what the engine needs from the file format.”
+│
+└─▣ Implement WAL replay                                      +55 ·  7d
+  │   turn 9 · “Agreed on the format. Now plan the WAL work in stages.”
+  ├─▣ Rewrite compaction                                      +40 ·  7d
+  │ │   turn 11 · “Stage 1 passes. Before stage 2, review the compacti…
+  │ └─○ Compaction: try leveled                               +14 ·  6d
+  │       turn 20 · “Merging is still too slow. Can we bound it?”
+  │
+  ├─○ Benchmark write stalls                                  +16 ·  6d
+  │     turn 14 · “Run the crash-recovery tests and report what fails.”
+  │
+  └─● Explain fsync ordering                                  +36 ·  6d
+    │   turn 14 · “Run the crash-recovery tests and report what fails.”
+    └─○ fsync: batch alternative                               +4 · 21m
+          turn 19 · “So the directory entry is not synced?”
 ```
 
-```
-⌂ "We have a log-structured key-value store…"
-├─○ Implement WAL replay                             ·  7d
-│ ├─● Explain fsync ordering             ⑂ turn 14   ·  6d   ← focus
-│ │ └─○ fsync: batch alternative         ⑂ turn 19   · now
-│ └┄○ Rewrite compaction                 ≈ turn 11   ·  7d
-└┄○ Earlier attempt (pre-install)        ≈ turn 3    ·  1w
-```
+- **One row per session**, indented 2 columns per level under the session it was forked from. Every row spans the full pane, so `+N · age` sits in one right-hand column.
+- **Title first, then fork info.** Under each forked session, an indented line says where it split off: `turn N` (fork color) and the last shared prompt (muted). The root has no fork line; the header's `anchor ⌂` shows its first prompt.
+- **Focus without frames:** the focus row gets `●` and an accent title, and the guide lines from the root down to it are drawn in the accent color.
+- **Density:** comfortable (default) adds a guide-only row between siblings; `=` or `tree --compact` removes them.
+- **Folding:** `h` folds a session's forks into `▸ +N`; sessions with forks that are off the focus path start folded.
+- Fork info lines and spacer rows are not selectable; the cursor moves over sessions only.
 
-| Element | Glyph | Meaning |
-|---|---|---|
-| frame owner | `▣` (`own` green; `accent` orange when it is the focus) | the session a frame belongs to; only on frame top borders |
-| focus node | `●` (bold, accent) | the current conversation, when it is a leaf row |
-| other session | `○` | |
-| live session | `◉` (pulsing is optional; static is fine) | Codex is writing to it now |
-| archived | `◌` (dim) | only visible with `a` |
-| common-prefix root | `⌂` | virtual node; its label is the shared first prompt |
-| error | `!` (warning color) | unreadable rollout |
+### Symbols
 
-### Edges
+The same table is shown in the app under `?` (keys & symbols).
 
-| Provenance | Connector | Fork label | Color |
-|---|---|---|---|
-| native / recorded | `├─` `└─` solid | `⑂ turn N` | normal |
-| inferred | `├┄` `└┄` dashed | `≈ turn N` | dim + hint color |
-| inferred, confirmed by the user | solid | `⑂ turn N ✓` | normal |
-
-ASCII fallback (`--ascii`, or detected when the locale isn't UTF-8): `|-`, `` `- ``, `:-` for inferred edges, `*` focus, `o` other, `~` for the inferred label.
+| Sample | Meaning |
+|---|---|
+| `●` + accent title | focus: the conversation this tree is about |
+| accent `│ ├─` | the path from the root to the focus |
+| `○` title | a session |
+| `▣` + bold green title | a session that has forks of its own |
+| `◉` | live: Codex is writing to it right now |
+| `◌` | archived (shown with `a`) |
+| `├─` `└─` | fork link recorded by Codex (exact) |
+| `├┄` + `≈` | inferred fork: copied history, no metadata (`x` confirm · `X` reject) |
+| `turn 9 · “…”` | forked after turn 9; the quote is the last shared prompt |
+| `+55 · 7d` | own turns after the fork point · age |
+| `▸ +3` | folded: 3 sessions hidden below |
 
 ## Details pane
 
@@ -157,17 +124,18 @@ Rules:
 |---|---|---|---|---|---|
 | `fg` | — | `#cdd6f4` (Text) | `#4c4f69` (Text) | default | body text, forked-session titles `○` |
 | `dim` | — | `#7f849c` (Overlay1) | `#7c7f93` (Overlay2) | bright black | metadata, guides, thin borders, turn labels |
-| `accent` | orange 30° | `#ff9e44` | `#d9480f` | bright red | focus `●`/`▣`, focus frame border, key hints |
-| `own` | green 95° | `#9be05c` | `#2b8a3e` | green | frame owner `▣` and title |
+| `accent` | orange 30° | `#ff9e44` | `#d9480f` | bright red | focus `●` and title, the path to the focus, key hints |
+| `own` | green 95° | `#9be05c` | `#2b8a3e` | green | `▣` and bold title of sessions that have forks |
 | `live` | teal 178° | `#2ed9cf` | `#0b7f8c` | cyan | `◉`, newly verified sessions |
-| `fork` | violet 270° | `#c38bff` | `#7c3aed` | magenta | `◆` fork points, quoted prompts, the transcript's "forked after" rule |
-| `inferred` | pink 330° | `#ff6ab8` | `#c2255c` | bright magenta | dashed edges and frames, `≈` labels |
+| `fork` | violet 270° | `#c38bff` | `#7c3aed` | magenta | `turn N` in fork info lines, the transcript's \"forked after\" rule |
+| `subtle` | — | `#a6adc8` (Subtext0) | `#6c6f85` (Subtext0) | gray | quoted prompts in fork info lines |
+| `inferred` | pink 330° | `#ff6ab8` | `#c2255c` | bright magenta | dashed connectors, `≈` labels |
 | `warn` | yellow 48° | `#ffd43b` | `#a66a00` | yellow | spinner, errors, stale cache (status bar only) |
 | `danger` | red 0° | `#ff5555` | `#e03131` | red | delete confirmation only |
 | `sel` | — | `#313244` (Surface0) | `#dce0e8` (Crust) | reverse video | selection bar |
 | `frame` | — | `#45475a` (Surface1) | `#bcc0cc` (Surface1) | bright black | outer chrome, pane dividers |
 
-The fork point `◆` and its prompt share the violet hue, so a fork point reads as one unit and never looks like a session title. Session titles are green (frame owner), orange (focus) or plain text (forked session).
+Session names are the brightest text: bold green for sessions with forks, accent orange for the focus, plain text otherwise. Fork info is quieter: `turn N` in violet, the quoted prompt in the muted `subtle` color.
 
 On the 16-color fallback, `fork` and `inferred` are both magenta (normal vs. bright). They stay apart by shape: `◆` and quoted text for fork points, dashed `┄`/`┆` for inferred edges.
 

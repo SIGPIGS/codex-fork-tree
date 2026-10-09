@@ -11,21 +11,41 @@
 ## Launch and focus resolution
 
 ```
-codex-fork-tree [SESSION]            # SESSION = uuid, uuid prefix, thread name, or rollout path
-codex-fork-tree --last               # newest session in the current project
+codex-fork-tree                      # project overview: every fork tree in the current project
+codex-fork-tree SESSION              # SESSION = uuid, uuid prefix, thread name, or rollout path
+codex-fork-tree --last [N]           # only the N most recently active sessions (default 1: open its tree)
 codex-fork-tree --project PATH       # override project root
+codex-fork-tree list [--all]         # print the project's trees (and standalone sessions)
+codex-fork-tree tree SESSION         # print one tree once, no colors
 codex-fork-tree index [--rebuild]    # warm/rebuild the project cache, no UI
-codex-fork-tree tree SESSION --plain # print the tree once (ASCII, for pipes/scripts)
 ```
 
-The focus session is resolved in this order. The first match wins:
+- **With a `SESSION`**, the tool opens that session's tree. That session is the "current conversation".
+- **Without one, it opens the project overview.** A project usually has many roots: several fork trees plus many standalone sessions. Guessing "the newest session" often lands on a session without forks, which is a one-node tree. So the tool lets you pick.
+- `--last [N]` narrows by recent activity (file modification time, so a resumed old session counts). `--last` alone opens the most recently active session's tree. `--last N` opens the overview limited to the trees that hold one of the N most recently active sessions, and opens the tree directly when they all share one. A header chip shows the limit, and `Esc` widens to the whole project.
+- An ambiguous id prefix or thread name is an error that lists the count. (Opening the overview prefiltered with that text is a possible improvement.)
+- Reading the thread id from the environment when launched inside Codex is not implemented. No such variable has been confirmed yet.
 
-1. the explicit `SESSION` argument
-2. the thread id from the environment when launched from inside Codex (to verify: the env var Codex exports to tool shells)
-3. the newest session whose `cwd` is inside the current project
-4. otherwise, open the **focus picker**: a fuzzy list of the project's sessions, newest first
+## Project overview
 
-An ambiguous uuid prefix or name also opens the focus picker, prefiltered with that text.
+```
+ codex-fork-tree · kvstore · overview                                 2 fork trees · 3 standalone
+ [standalone on] [archived off]
+──────────────────────────────────────────────────────────────────────────────────────────────────
+ FORK TREES  2                                 │  ⏎ opens at c08f6197 fsync: batch alternative
+ ▣ Design the storage engine  8 sessions · now │
+ ▣ Port the CLI to clap       2 sessions ·  2d │ ╭─ ▣ Design the storage engine ── +38 ·  1w ─╮
+                                               │ │ ◆ turn 3 “List what the engine needs… +3 │
+ STANDALONE SESSIONS  3                        │ │ …                                         │
+ ○ Fix typo in README         1 turn ·  4h     │
+```
+
+- **Left list:** every root in the project. Fork trees come first, then standalone sessions, each group ordered by most recent activity anywhere in the tree. A session's `cwd` is shown when it is a subdirectory of the project.
+- **Right preview:** the selected tree, focused on its **most recently active session**, which is where `Enter` will open it. The tree scrolls so that session is visible.
+- **Keys:** `j`/`k`, `g`/`G`, PageUp/PageDown move. `Enter`/`l` opens the tree. `/` filters by title, prompt or id (space-separated words must all match). `s` hides or shows standalone sessions. `a` shows archived trees. `q` quits.
+- **Coming back:** in the tree view, `Esc` (or `o`/`Tab`, or a click on `‹ all trees` in the header) returns to the overview with that tree selected; only `q` quits. `Esc` in the overview goes back to the open tree, or quits when none was opened.
+- **Layout:** side by side at ≥ 100 columns, stacked (list above preview) at 60–99, list only below 60.
+- **Empty tree:** a tree view of a session without relatives says so and points to `o`.
 
 ## Screens
 
@@ -36,7 +56,7 @@ There is one main screen with two panes, plus overlays. There is no screen stack
 | **Tree** (main) | Fork tree on the left, details of the selected node on the right | launch |
 | **Transcript** overlay | Full-height scrollable transcript of the selected session; the fork point is marked | `Enter` / `t` |
 | **Compare** overlay | Two sessions side by side, starting at their fork point | `c` on a second node after `m` (mark) |
-| **Focus picker** | Fuzzy-find any session in the project and make it the focus | `f` / `/` with empty tree |
+| **Project overview** | Every fork tree and standalone session in the project, with a live preview; pick one to open | launch without `SESSION`, or `o` / `Tab` |
 | **Confirm** dialog | Destructive or outward actions | archive, delete |
 | **Help** | Keymap reference, generated from the binding table | `?` |
 
@@ -45,7 +65,7 @@ There is one main screen with two panes, plus overlays. There is no screen stack
 **Selection model**
 
 - The cursor starts on the focus node, and that row is centered.
-- `j`/`k` (or `↓`/`↑`) move through selectable rows: frame tops, `◆` fork points and leaf sessions. Bottom borders are skipped. `h`/`l` (or `←`/`→`) fold or unfold a frame, or jump to its parent or first child. The parent of a branch is its `◆`, and the parent of a `◆` is its frame.
+- `j`/`k` (or `↓`/`↑`) move between sessions; fork info lines and spacer rows are skipped. `h`/`l` (or `←`/`→`) fold or unfold a session's forks, or jump to its parent or first child. `=` switches between comfortable and compact spacing, and `?` shows every key and symbol.
 - `gg`/`G` go to the first or last node. `p` goes to the parent and `F` goes back to the focus node.
 - `[`/`]` move to the previous or next sibling: the alternative branches at the same fork point.
 - The details pane follows the cursor. It is debounced, so holding `j` stays smooth.
@@ -122,6 +142,15 @@ Rules:
 
 If the new session can't be determined after a fork (for example, the user quit Codex before sending anything), show a one-line notice and keep the old focus.
 
-## Mouse (optional)
+## Mouse
 
-Click to select, double-click to open the transcript, and scroll the wheel inside either pane. There is no drag interaction.
+The mouse is always captured. Most terminals still allow native text selection with Shift held.
+
+| Where | Wheel | Click | Double-click |
+|---|---|---|---|
+| Tree | moves the selection one session per notch; the view follows | selects the session (its fork-info line counts too); `‹ all trees` in the header goes back to the overview | makes it the focus (`f`) |
+| Overview list | moves the selection; the preview follows | selects the tree | opens it (`Enter`) |
+| Transcript, keys & symbols | scrolls | — | — |
+| Narrow details overlay | — | closes it | — |
+
+While `codex` runs (resume or fork), the mouse is handed back to the terminal. It is captured again when the TUI returns. There is no drag interaction.

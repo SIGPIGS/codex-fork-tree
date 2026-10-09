@@ -15,6 +15,8 @@ pub enum Role {
     Own,
     Live,
     Fork,
+    /// muted text: quoted prompts in fork info lines
+    Subtle,
     Inferred,
     Warn,
     Danger,
@@ -160,25 +162,13 @@ pub fn rel_age(now: f64, t: f64) -> String {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
     Session(String),
-    Fork(String, usize),
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum RowKind {
-    FrameTop,
-    Fork,
-    Leaf,
-    Border,
 }
 
 #[derive(Clone, Debug)]
 pub struct Row {
     pub key: Option<Key>,
     pub parent: Option<Key>,
-    pub kind: RowKind,
     pub session: Option<usize>,
-    /// (session owning the fork point, k, previous fork point)
-    pub fork: Option<(usize, usize, usize)>,
     pub line: Line,
 }
 
@@ -191,22 +181,13 @@ pub struct View<'a> {
     pub show_archived: bool,
     pub show_inferred: bool,
     pub show_empty: bool,
+    /// compact density: no spacer rows between siblings
+    pub compact: bool,
     pub now: f64,
     pub path: HashSet<usize>,
 }
 
-pub const MIN_FRAME: usize = 30;
 const LIVE_WINDOW_S: f64 = 5.0;
-
-struct BoxChars {
-    tl: &'static str,
-    tr: &'static str,
-    bl: &'static str,
-    br: &'static str,
-    h: &'static str,
-    v: &'static str,
-    role: Role,
-}
 
 impl<'a> View<'a> {
     pub fn new(
@@ -227,9 +208,15 @@ impl<'a> View<'a> {
             show_archived: toggles.0,
             show_inferred: toggles.1,
             show_empty: toggles.2,
+            compact: false,
             now,
             path: g.path_to_root(focus),
         }
+    }
+
+    pub fn with_compact(mut self, compact: bool) -> View<'a> {
+        self.compact = compact;
+        self
     }
 
     pub fn is_live(&self, s: usize) -> bool {
@@ -309,25 +296,33 @@ impl<'a> View<'a> {
         out
     }
 
-    fn leaf_marker(&self, s: usize) -> Seg {
+    /// ● focus · ◉ live · ◌ archived · ▣ has forks of its own · ○ other
+    pub fn marker(&self, s: usize) -> Seg {
         if s == self.focus {
             bold("●", Role::Accent)
         } else if self.is_live(s) {
             seg("◉", Role::Live)
         } else if self.g.sessions[s].archived {
             seg("◌", Role::Dim)
+        } else if !self.kids(s).is_empty() {
+            seg("▣", Role::Own)
         } else {
             seg("○", Role::Fg)
         }
     }
 
-    fn owner_marker(&self, s: usize) -> Seg {
+    fn title_style(&self, s: usize) -> (Role, bool) {
+        let sess = &self.g.sessions[s];
         if s == self.focus {
-            bold("▣", Role::Accent)
-        } else if self.is_live(s) {
-            seg("▣", Role::Live)
+            (Role::Accent, true)
+        } else if self.fresh.contains(&sess.id) {
+            (Role::Live, false)
+        } else if sess.archived {
+            (Role::Dim, false)
+        } else if !self.kids(s).is_empty() {
+            (Role::Own, true)
         } else {
-            seg("▣", Role::Own)
+            (Role::Fg, false)
         }
     }
 
@@ -348,46 +343,6 @@ impl<'a> View<'a> {
         m
     }
 
-    fn box_chars(&self, s: usize) -> BoxChars {
-        if s == self.focus {
-            BoxChars {
-                tl: "┏",
-                tr: "┓",
-                bl: "┗",
-                br: "┛",
-                h: "━",
-                v: "┃",
-                role: Role::Accent,
-            }
-        } else if self.is_inferred(s) {
-            BoxChars {
-                tl: "╭",
-                tr: "╮",
-                bl: "╰",
-                br: "╯",
-                h: "┄",
-                v: "┆",
-                role: Role::Inferred,
-            }
-        } else {
-            BoxChars {
-                tl: "╭",
-                tr: "╮",
-                bl: "╰",
-                br: "╯",
-                h: "─",
-                v: "│",
-                role: Role::Dim,
-            }
-        }
-    }
-
-    fn framed(&self, s: usize, width: usize) -> bool {
-        width >= MIN_FRAME
-            && !self.collapsed.contains(&self.g.sessions[s].id)
-            && !self.kids(s).is_empty()
-    }
-
     fn edge_style(&self, s: usize) -> (&'static str, Role) {
         if self.is_inferred(s) {
             ("┄", Role::Inferred)
@@ -396,170 +351,82 @@ impl<'a> View<'a> {
         }
     }
 
-    fn leaf(
-        &self,
-        s: usize,
-        from: usize,
-        w: usize,
-        conn: Option<(String, Role)>,
-        parent: Option<Key>,
-    ) -> Row {
-        let mut left = vec![];
-        if let Some((c, r)) = conn {
-            left.push(seg(c, r));
-        }
-        left.push(self.leaf_marker(s));
-        left.push(seg(" ", Role::Fg));
-        let sess = &self.g.sessions[s];
-        let role = if self.fresh.contains(&sess.id) {
-            Role::Live
-        } else if sess.archived {
-            Role::Dim
-        } else {
-            Role::Fg
-        };
-        left.extend(self.title_segs(s, role, s == self.focus));
-        let n = self.desc_count(s);
-        if n > 0 {
-            left.push(seg(format!(" ▸ +{n}"), Role::Dim));
-        }
-        Row {
-            key: Some(Key::Session(sess.id.clone())),
-            parent,
-            kind: RowKind::Leaf,
-            session: Some(s),
-            fork: None,
-            line: lr(left, self.meta(s, from), w),
-        }
-    }
-
-    fn frame(&self, s: usize, from: usize, fw: usize, parent: Option<Key>, out: &mut Vec<Row>) {
-        let bx = self.box_chars(s);
-        let id = self.g.sessions[s].id.clone();
-        let key = Key::Session(id.clone());
-        let lab = self.meta(s, from);
-        let lab_w = line_width(&lab);
-        let t_segs = self.title_segs(s, Role::Own, s == self.focus);
-        let t_max = fw.saturating_sub(11 + lab_w).max(4);
-        let t_w = line_width(&t_segs).min(t_max);
-        let title = fit(t_segs, t_w);
-        let fill = fw.saturating_sub(10 + t_w + lab_w).max(1);
-        let mut top = vec![
-            seg(format!("{}{} ", bx.tl, bx.h), bx.role),
-            self.owner_marker(s),
-            seg(" ", Role::Fg),
-        ];
-        top.extend(title);
-        top.push(seg(format!(" {} ", bx.h.repeat(fill)), bx.role));
-        top.extend(lab);
-        top.push(seg(format!(" {}{}", bx.h, bx.tr), bx.role));
-        out.push(Row {
-            key: Some(key.clone()),
-            parent,
-            kind: RowKind::FrameTop,
-            session: Some(s),
-            fork: None,
-            line: top,
-        });
-
-        let iw = fw - 4;
-        let kids: Vec<usize> = self
-            .kids(s)
-            .into_iter()
-            .filter(|&c| self.g.fork_k(c) > from)
-            .collect();
-        let mut forks: Vec<usize> = kids.iter().map(|&c| self.g.fork_k(c)).collect();
-        forks.dedup();
-        let mut inner: Vec<Row> = vec![];
-        let mut prev = from;
-        for (fi, &k) in forks.iter().enumerate() {
-            let fk = Key::Fork(id.clone(), k);
-            let prompt = self.g.eff_turn(s, k - 1).map_or("?", |t| t.user.as_str());
-            inner.push(Row {
-                key: Some(fk.clone()),
-                parent: Some(key.clone()),
-                kind: RowKind::Fork,
-                session: None,
-                fork: Some((s, k, prev)),
-                line: lr(
-                    vec![
-                        seg("◆ ", Role::Fork),
-                        seg(format!("turn {k} "), Role::Dim),
-                        seg(format!("“{prompt}”"), Role::Fork),
-                    ],
-                    vec![seg(format!("+{} turns", k - prev), Role::Dim)],
-                    iw,
-                ),
-            });
-            prev = k;
-            let group: Vec<usize> = kids
-                .iter()
-                .copied()
-                .filter(|&c| self.g.fork_k(c) == k)
-                .collect();
-            for (j, &c) in group.iter().enumerate() {
-                let last = fi == forks.len() - 1 && j == group.len() - 1;
-                let (h, role) = self.edge_style(c);
-                let conn = format!("{}{}", if last { "└" } else { "├" }, h);
-                let cont = if last { "  " } else { "│ " };
-                if iw >= 2 && self.framed(c, iw - 2) {
-                    let mut sub = vec![];
-                    self.frame(c, k, iw - 2, Some(fk.clone()), &mut sub);
-                    for (i, mut r) in sub.into_iter().enumerate() {
-                        let p = if i == 0 {
-                            seg(conn.clone(), role)
-                        } else {
-                            seg(cont, Role::Dim)
-                        };
-                        r.line.insert(0, p);
-                        inner.push(r);
-                    }
-                } else {
-                    inner.push(self.leaf(c, k, iw, Some((conn, role)), Some(fk.clone())));
-                }
-            }
-        }
-        for mut r in inner {
-            r.line.insert(0, seg(format!("{} ", bx.v), bx.role));
-            r.line.push(seg(format!(" {}", bx.v), bx.role));
-            out.push(r);
-        }
-        let end = format!(" ends at turn {} ", self.g.len(s));
-        out.push(Row {
-            key: None,
-            parent: None,
-            kind: RowKind::Border,
-            session: None,
-            fork: None,
-            line: vec![
-                seg(
-                    format!(
-                        "{}{}",
-                        bx.bl,
-                        bx.h.repeat(fw.saturating_sub(3 + dw(&end)).max(1))
-                    ),
-                    bx.role,
-                ),
-                seg(end, Role::Dim),
-                seg(format!("{}{}", bx.h, bx.br), bx.role),
-            ],
-        });
-    }
-
-    /// All rows of the focus tree, each exactly `w` cells wide.
+    /// All rows of the focus tree, each exactly `w` cells wide: an outline with one row per
+    /// session, the fork point under each forked session, and `+N · age` in one right column.
     pub fn rows(&self, w: usize) -> Vec<Row> {
-        let root = self.g.root_of(self.focus);
-        let inner = w.saturating_sub(1);
+        let inner = w.saturating_sub(1).max(1);
         let mut rows = vec![];
-        if self.framed(root, inner) {
-            self.frame(root, 0, inner, None, &mut rows);
-        } else {
-            rows.push(self.leaf(root, 0, inner, None, None));
-        }
+        self.walk(self.g.root_of(self.focus), &[], None, None, None, inner, &mut rows);
         for r in &mut rows {
             r.line.push(seg(" ", Role::Fg)); // one column of air before the pane divider
         }
         rows
+    }
+
+    /// `prefix`: guides for this node's column; `conn`/`cont`: its connector and the guide that
+    /// continues below it. Guides leading down to the focus are drawn in the accent color.
+    #[allow(clippy::too_many_arguments)]
+    fn walk(
+        &self,
+        s: usize,
+        prefix: &[Seg],
+        conn: Option<Seg>,
+        cont: Option<Seg>,
+        parent: Option<Key>,
+        w: usize,
+        rows: &mut Vec<Row>,
+    ) {
+        let id = self.g.sessions[s].id.clone();
+        let all = self.kids(s);
+        let open = !all.is_empty() && !self.collapsed.contains(&id);
+        let ks: &[usize] = if open { &all } else { &[] };
+
+        let mut left: Line = prefix.to_vec();
+        left.extend(conn);
+        left.push(self.marker(s));
+        left.push(seg(" ", Role::Fg));
+        let (role, is_bold) = self.title_style(s);
+        left.extend(self.title_segs(s, role, is_bold));
+        if !open && !all.is_empty() {
+            left.push(seg(format!(" ▸ +{}", self.desc_count(s)), Role::Dim));
+        }
+        rows.push(Row {
+            key: Some(Key::Session(id.clone())),
+            parent,
+            session: Some(s),
+            line: lr(left, self.meta(s, self.g.fork_k(s)), w),
+        });
+
+        let mut desc = prefix.to_vec();
+        desc.extend(cont);
+        let path_idx = ks.iter().position(|c| self.path.contains(c));
+        if let Some(e) = self.g.edge[s] {
+            let prompt = self.g.eff_turn(s, e.k - 1).map_or("?", |t| t.user.as_str());
+            let mut l = desc.clone();
+            let down = if ks.is_empty() { " " } else { "│" };
+            l.push(seg(down, if path_idx.is_some() { Role::Accent } else { Role::Dim }));
+            l.push(seg("   ", Role::Fg));
+            l.push(seg(format!("turn {}", e.k), Role::Fork));
+            l.push(seg(" · ", Role::Dim));
+            l.push(seg(format!("“{prompt}”"), Role::Subtle));
+            rows.push(Row { key: None, parent: None, session: Some(s), line: fit(l, w) });
+        }
+        for (i, &c) in ks.iter().enumerate() {
+            let last = i == ks.len() - 1;
+            let before = path_idx.is_some_and(|p| i < p);
+            let (h, edge_role) = self.edge_style(c);
+            let c_conn = seg(
+                format!("{}{h}", if last { "└" } else { "├" }),
+                if path_idx == Some(i) { Role::Accent } else { edge_role },
+            );
+            let c_cont = seg(if last { "  " } else { "│ " }, if before { Role::Accent } else { Role::Dim });
+            self.walk(c, &desc, Some(c_conn), Some(c_cont), Some(Key::Session(id.clone())), w, rows);
+            if !self.compact && !last {
+                let mut l = desc.clone();
+                l.push(seg("│", if before { Role::Accent } else { Role::Dim }));
+                rows.push(Row { key: None, parent: None, session: None, line: fit(l, w) });
+            }
+        }
     }
 
     // ---- details pane ------------------------------------------------------------------------
@@ -568,91 +435,22 @@ impl<'a> View<'a> {
         let mut l: Vec<Line> = vec![];
         let Some(row) = row else { return l };
         let push = |l: &mut Vec<Line>, segs: Line| l.push(fit(segs, w));
-        if let Some((s, k, _)) = row.fork {
-            let mut br = vec![s];
-            br.extend(self.kids(s).into_iter().filter(|&c| self.g.fork_k(c) == k));
-            push(
-                &mut l,
-                vec![
-                    bold("Fork point", Role::Fg),
-                    seg(format!("  ·  turn {k}"), Role::Dim),
-                ],
-            );
-            push(
-                &mut l,
-                vec![
-                    seg(format!("in {} ", short(&self.g.sessions[s].id)), Role::Dim),
-                    seg(self.base_title(s), Role::Own),
-                ],
-            );
-            push(&mut l, vec![]);
-            push(&mut l, vec![seg("LAST SHARED PROMPT", Role::Dim)]);
-            let prompt = self
-                .g
-                .eff_turn(s, k - 1)
-                .map_or(String::new(), |t| t.user.clone());
-            for x in wrap(&prompt, w.saturating_sub(4)).into_iter().take(4) {
-                push(&mut l, vec![seg(format!("  {x}"), Role::Fork)]);
-            }
-            push(&mut l, vec![]);
-            push(
-                &mut l,
-                vec![seg(format!("BRANCHES  {}", br.len()), Role::Dim)],
-            );
-            for (j, &b) in br.iter().enumerate() {
-                let note = if j == 0 {
-                    seg("  (continues)", Role::Dim)
-                } else if self.is_inferred(b) {
-                    seg("  ≈ inferred", Role::Inferred)
-                } else {
-                    seg(
-                        format!("  {}", self.g.edge[b].map_or("", |e| e.kind.label())),
-                        Role::Dim,
-                    )
-                };
-                let mut line = vec![
-                    seg("  ", Role::Fg),
-                    if j == 0 {
-                        self.owner_marker(b)
-                    } else {
-                        self.leaf_marker(b)
-                    },
-                    seg(" ", Role::Fg),
-                ];
-                line.extend(self.title_segs(
-                    b,
-                    if j == 0 { Role::Own } else { Role::Fg },
-                    b == self.focus,
-                ));
-                line.push(note);
-                push(&mut l, line);
-            }
-            push(&mut l, vec![]);
-            push(
-                &mut l,
-                vec![seg(
-                    format!("shared before this point: {k} turns"),
-                    Role::Dim,
-                )],
-            );
-            return l;
-        }
         let Some(s) = row.session else { return l };
         let sess = &self.g.sessions[s];
-        let framed = row.kind == RowKind::FrameTop;
+        let owner = !self.kids(s).is_empty();
         let badge = if s == self.focus {
-            seg(if framed { "▣ focus" } else { "● focus" }, Role::Accent)
+            seg("● focus", Role::Accent)
         } else if self.is_live(s) {
             seg("◉ live", Role::Live)
         } else if sess.archived {
             seg("◌ archived", Role::Dim)
-        } else if framed {
+        } else if owner {
             seg("▣ has forks", Role::Own)
         } else {
             seg("", Role::Fg)
         };
         l.push(lr(
-            self.title_segs(s, if framed { Role::Own } else { Role::Fg }, true),
+            self.title_segs(s, if owner { Role::Own } else { Role::Fg }, true),
             vec![badge],
             w,
         ));
@@ -675,9 +473,10 @@ impl<'a> View<'a> {
             &mut l,
             vec![seg(
                 format!(
-                    "created {created} · {} ago · {} turns",
+                    "created {created} · {} ago · {} turn{}",
                     rel_age(self.now, sess.created),
-                    self.g.len(s)
+                    self.g.len(s),
+                    if self.g.len(s) == 1 { "" } else { "s" }
                 ),
                 Role::Dim,
             )],

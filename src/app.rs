@@ -3,12 +3,18 @@
 use crate::cache::Cache;
 use crate::codex::{project_root, resolve_focus, thread_names};
 use crate::graph::{EdgeKind, Graph};
-use crate::layout::{Key, Line, Role, Row, RowKind, View, short};
+use crate::layout::{Key, Line, Role, Row, View, short};
 use crate::ledger::{Ledger, Verdict};
+use crate::overview::{self, Picker};
 use crate::theme::{Theme, ThemeName};
 use crate::transcript::{self, Transcript};
 use anyhow::{Context, Result};
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
+use ratatui::crossterm::execute;
+use ratatui::layout::Rect;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -21,7 +27,9 @@ const TOAST_FOR: Duration = Duration::from_millis(2800);
 
 pub enum Overlay {
     None,
-    Help,
+    Help {
+        scroll: usize,
+    },
     Details,
     Transcript {
         id: String,
@@ -60,6 +68,8 @@ pub struct App {
     pub show_archived: bool,
     pub show_inferred: bool,
     pub show_empty: bool,
+    /// compact density: no spacer rows between siblings
+    pub compact: bool,
     pub overlay: Overlay,
     pub toast: Option<(String, Role, Instant)>,
     pub theme: Theme,
@@ -73,6 +83,23 @@ pub struct App {
     pub exec: Option<Exec>,
     pub quit: bool,
     last_g: Option<Instant>,
+    pub mode: Mode,
+    pub picker: Picker,
+    /// Screen areas recorded at draw time, for mouse hit-testing.
+    pub hit_tree: Option<Rect>,
+    pub hit_list: Option<Rect>,
+    pub hit_list_rows: Vec<Option<usize>>,
+    /// The clickable "‹ all trees" in the tree header.
+    pub hit_back: Option<Rect>,
+    last_click: Option<(Instant, u16, u16)>,
+    /// A tree has been opened, so Esc in the overview returns to it.
+    pub has_tree: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Overview,
+    Tree,
 }
 
 pub fn now() -> f64 {
@@ -123,6 +150,7 @@ impl App {
             (self.show_archived, self.show_inferred, self.show_empty),
             now(),
         )
+        .with_compact(self.compact)
     }
 
     fn reset_collapse(&mut self) {
@@ -198,7 +226,7 @@ impl App {
 
     fn selected_session(&self) -> Option<usize> {
         let r = self.selected_row()?;
-        r.session.or(r.fork.map(|f| f.0))
+        r.session
     }
 
     /// Make sure the selection points at an existing row (after rebuilds, folds, filters).
@@ -238,12 +266,22 @@ impl App {
             return;
         }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-        match &mut self.overlay {
-            Overlay::None => {}
-            Overlay::Help => {
-                self.overlay = Overlay::None;
-                return;
+        if let Overlay::Help { scroll } = &mut self.overlay {
+            match k.code {
+                KeyCode::Char('j') | KeyCode::Down => *scroll += 1,
+                KeyCode::Char('k') | KeyCode::Up => *scroll = scroll.saturating_sub(1),
+                KeyCode::PageDown | KeyCode::Char(' ') => *scroll += self.body_height.max(1),
+                KeyCode::PageUp => *scroll = scroll.saturating_sub(self.body_height.max(1)),
+                _ => self.overlay = Overlay::None,
             }
+            return;
+        }
+        if self.mode == Mode::Overview {
+            self.on_overview_key(k, ctrl);
+            return;
+        }
+        match &mut self.overlay {
+            Overlay::None | Overlay::Help { .. } => {}
             Overlay::Transcript { t, scroll, .. } => {
                 let page = self.body_height.saturating_sub(2).max(1);
                 let max = t.lines.len().saturating_sub(self.body_height.max(1));
@@ -325,7 +363,9 @@ impl App {
         let row = self.selected_row().cloned();
         let sess = self.selected_session();
         match k.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
+            KeyCode::Char('q') => self.quit = true,
+            // Esc goes back up to the project's tree list; q quits
+            KeyCode::Esc | KeyCode::Char('o') | KeyCode::Tab => self.open_overview(),
             KeyCode::Char('c') if ctrl => self.quit = true,
             KeyCode::Char('r') if ctrl => {
                 let changed = self.refresh();
@@ -365,12 +405,16 @@ impl App {
             }
             KeyCode::Char('h') | KeyCode::Left => {
                 if let Some(r) = row {
-                    let id = r.session.map(|s| self.graph.sessions[s].id.clone());
-                    match (r.kind, id) {
-                        (RowKind::FrameTop, Some(id)) => {
-                            self.collapsed.insert(id);
+                    // fold an open session with children; otherwise go to the parent
+                    let open = r.session.filter(|&s| {
+                        !self.view().kids(s).is_empty()
+                            && !self.collapsed.contains(&self.graph.sessions[s].id)
+                    });
+                    match open {
+                        Some(s) => {
+                            self.collapsed.insert(self.graph.sessions[s].id.clone());
                         }
-                        _ => {
+                        None => {
                             if let Some(p) = r.parent {
                                 self.sel = Some(p);
                             }
@@ -422,18 +466,16 @@ impl App {
                 }
             }
             KeyCode::Char('t') => self.open_transcript(),
-            KeyCode::Char('?') => self.overlay = Overlay::Help,
+            KeyCode::Char('?') => self.overlay = Overlay::Help { scroll: 0 },
             KeyCode::Char('a') => self.show_archived = !self.show_archived,
             KeyCode::Char('i') => self.show_inferred = !self.show_inferred,
             KeyCode::Char('e') => self.show_empty = !self.show_empty,
+            KeyCode::Char('=') => self.compact = !self.compact,
             KeyCode::Char('<') => self.split = (self.split - 0.05).max(0.35),
             KeyCode::Char('>') => self.split = (self.split + 0.05).min(0.8),
             KeyCode::Char('f') => {
                 if let Some(s) = sess {
-                    self.focus_id = self.graph.sessions[s].id.clone();
-                    self.sel = Some(Key::Session(self.focus_id.clone()));
-                    self.reset_collapse();
-                    self.toast(format!("focus → {}", short(&self.focus_id)), Role::Accent);
+                    self.focus_on(s);
                 }
             }
             KeyCode::Char('r') => {
@@ -517,6 +559,197 @@ impl App {
         }
     }
 
+    fn focus_on(&mut self, s: usize) {
+        self.focus_id = self.graph.sessions[s].id.clone();
+        self.sel = Some(Key::Session(self.focus_id.clone()));
+        self.reset_collapse();
+        self.toast(format!("focus → {}", short(&self.focus_id)), Role::Accent);
+    }
+
+    /// Wheel scrolls; click selects; double-click focuses (tree) or opens (overview).
+    pub fn on_mouse(&mut self, m: MouseEvent) {
+        let (col, row) = (m.column, m.row);
+        let wheel: isize = match m.kind {
+            MouseEventKind::ScrollUp => -3,
+            MouseEventKind::ScrollDown => 3,
+            _ => 0,
+        };
+        let click = matches!(m.kind, MouseEventKind::Down(MouseButton::Left));
+        if wheel == 0 && !click {
+            return;
+        }
+        let double = click
+            && self.last_click.is_some_and(|(t, c, r)| {
+                t.elapsed() < Duration::from_millis(400) && c.abs_diff(col) <= 1 && r == row
+            });
+        if click {
+            self.last_click = if double { None } else { Some((Instant::now(), col, row)) };
+        }
+        let step = |v: usize, d: isize, max: usize| (v as isize + d).clamp(0, max as isize) as usize;
+        let inside = |r: Rect| col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height;
+
+        match &mut self.overlay {
+            Overlay::Help { scroll } => {
+                *scroll = step(*scroll, wheel, usize::MAX / 2);
+                return;
+            }
+            Overlay::Transcript { t, scroll, .. } => {
+                let max = t.lines.len().saturating_sub(self.body_height.max(1));
+                *scroll = step(*scroll, wheel, max);
+                return;
+            }
+            Overlay::Details => {
+                if click {
+                    self.overlay = Overlay::None;
+                }
+                return;
+            }
+            Overlay::ConfirmArchive { .. } | Overlay::ConfirmDelete { .. } => return,
+            Overlay::None => {}
+        }
+
+        if self.mode == Mode::Overview {
+            let all = self.overview_entries();
+            let visible = self.picker.visible(&all, self.show_archived);
+            if wheel != 0 {
+                self.picker.sel = step(self.picker.sel, wheel.signum(), visible.len().saturating_sub(1));
+                return;
+            }
+            let hit = self
+                .hit_list
+                .filter(|r| inside(*r))
+                .and_then(|r| self.hit_list_rows.get((row - r.y) as usize).copied().flatten());
+            if let Some(i) = hit {
+                self.picker.sel = i;
+                if double {
+                    let target = visible[i].target;
+                    self.open_entry(target);
+                }
+            }
+            return;
+        }
+
+        // wheel moves the selection one session per notch, like the overview; the view follows
+        if wheel != 0 {
+            self.move_sel(wheel.signum());
+            return;
+        }
+        if self.hit_back.is_some_and(inside) {
+            self.open_overview();
+            return;
+        }
+        let Some(area) = self.hit_tree else { return };
+        if !inside(area) {
+            return;
+        }
+        // a fork-info line belongs to the session above it; spacer rows select nothing
+        let s = self.rows.get(self.scroll + (row - area.y) as usize).and_then(|r| r.session);
+        if let Some(s) = s {
+            self.sel = Some(Key::Session(self.graph.sessions[s].id.clone()));
+            if double {
+                self.focus_on(s);
+            }
+        }
+    }
+
+    pub fn overview_entries(&self) -> Vec<overview::Entry> {
+        let mut all = overview::entries(&self.graph, &self.names);
+        if let Some(n) = self.picker.recent {
+            let roots = overview::recent_roots(&self.graph, n);
+            all.retain(|e| roots.contains(&e.root));
+        }
+        all
+    }
+
+    pub fn open_overview(&mut self) {
+        let all = self.overview_entries();
+        let focus = self.focus();
+        self.picker.select_tree_of(&self.graph, &all, focus, self.show_archived);
+        self.mode = Mode::Overview;
+    }
+
+    pub fn open_entry(&mut self, target: usize) {
+        self.focus_id = self.graph.sessions[target].id.clone();
+        self.sel = Some(Key::Session(self.focus_id.clone()));
+        self.scroll = 0;
+        self.reset_collapse();
+        self.mode = Mode::Tree;
+        self.has_tree = true;
+    }
+
+    fn on_overview_key(&mut self, k: KeyEvent, ctrl: bool) {
+        let all = self.overview_entries();
+        let n = self.picker.visible(&all, self.show_archived).len();
+        let p = &mut self.picker;
+        if p.editing {
+            match k.code {
+                KeyCode::Esc => {
+                    p.editing = false;
+                    p.filter.clear();
+                }
+                KeyCode::Enter | KeyCode::Down | KeyCode::Up => {
+                    p.editing = false;
+                    if k.code != KeyCode::Enter {
+                        return self.on_overview_key(k, ctrl);
+                    }
+                }
+                KeyCode::Backspace => {
+                    p.filter.pop();
+                }
+                KeyCode::Char(c) if !ctrl => p.filter.push(c),
+                _ => {}
+            }
+            p.sel = 0;
+            return;
+        }
+        let page = self.body_height.max(1);
+        match k.code {
+            KeyCode::Char('q') => self.quit = true,
+            KeyCode::Char('c') if ctrl => self.quit = true,
+            KeyCode::Esc if !p.filter.is_empty() => {
+                p.filter.clear();
+                p.sel = 0;
+            }
+            KeyCode::Esc if p.recent.is_some() => {
+                p.recent = None; // widen from the last N sessions to the whole project
+                p.sel = 0;
+            }
+            KeyCode::Esc | KeyCode::Char('o') | KeyCode::Tab => {
+                if self.has_tree {
+                    self.mode = Mode::Tree;
+                } else {
+                    self.quit = true;
+                }
+            }
+            KeyCode::Char('j') | KeyCode::Down => p.sel = (p.sel + 1).min(n.saturating_sub(1)),
+            KeyCode::Char('k') | KeyCode::Up => p.sel = p.sel.saturating_sub(1),
+            KeyCode::PageDown => p.sel = (p.sel + page).min(n.saturating_sub(1)),
+            KeyCode::PageUp => p.sel = p.sel.saturating_sub(page),
+            KeyCode::Char('G') | KeyCode::End => p.sel = n.saturating_sub(1),
+            KeyCode::Char('g') | KeyCode::Home => p.sel = 0,
+            KeyCode::Char('/') => p.editing = true,
+            KeyCode::Char('?') => self.overlay = Overlay::Help { scroll: 0 },
+            KeyCode::Char('s') => {
+                p.hide_standalone = !p.hide_standalone;
+                p.sel = 0;
+            }
+            KeyCode::Char('a') => {
+                self.show_archived = !self.show_archived;
+                self.picker.sel = 0;
+            }
+            KeyCode::Char('r') if ctrl => {
+                self.refresh();
+            }
+            KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => {
+                let target = self.picker.visible(&all, self.show_archived).get(self.picker.sel).map(|e| e.target);
+                if let Some(t) = target {
+                    self.open_entry(t);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Re-wrap an open transcript after a resize, keeping roughly the same position.
     pub fn rewrap_transcript(&mut self, w: usize) {
         let Overlay::Transcript {
@@ -564,6 +797,16 @@ impl App {
             width,
             scroll,
         };
+    }
+
+    /// Where to start `codex`: the session's own cwd, else the project root, else inherit ours.
+    /// Either may be gone (a moved or deleted repo); spawning in a missing directory fails.
+    pub fn exec_dir(&self, exec: &Exec) -> Option<PathBuf> {
+        let id = match exec {
+            Exec::Resume(id) | Exec::Fork(id) => id,
+        };
+        let cwd = self.graph.by_id.get(id).map(|&s| PathBuf::from(&self.graph.sessions[s].cwd));
+        cwd.into_iter().chain([self.root.clone()]).find(|d| d.is_dir())
     }
 
     fn codex_cmd(&mut self, verb: &str, id: &str) {
@@ -664,10 +907,20 @@ pub fn run(
     home: &Path,
     session: Option<&str>,
     project: Option<&Path>,
+    last: Option<usize>,
     theme: ThemeName,
 ) -> Result<()> {
     let resolved = resolve_focus(home, session, project)?;
-    let root = project_root(&resolved.meta.cwd);
+    // a named session wins; `--last` (N = 1) opens the most recent tree; otherwise the overview
+    let open_last = session.is_none() && last == Some(1);
+    let overview = session.is_none() && !open_last;
+    // the overview covers the project you are in; a named session brings its own project
+    let root = if session.is_none() {
+        let dir = project.map(Path::to_path_buf).unwrap_or(std::env::current_dir()?);
+        project_root(&dir.to_string_lossy())
+    } else {
+        project_root(&resolved.meta.cwd)
+    };
     let (cache, ledger, names, graph) = load(home, &root, false, false);
     if !graph.by_id.contains_key(&resolved.meta.id) {
         anyhow::bail!(
@@ -691,6 +944,7 @@ pub fn run(
         show_archived: false,
         show_inferred: true,
         show_empty: false,
+        compact: false,
         overlay: Overlay::None,
         toast: None,
         theme: Theme::resolve(theme),
@@ -704,19 +958,51 @@ pub fn run(
         exec: None,
         quit: false,
         last_g: None,
+        mode: if overview { Mode::Overview } else { Mode::Tree },
+        picker: Picker::default(),
+        hit_tree: None,
+        hit_list: None,
+        hit_list_rows: vec![],
+        hit_back: None,
+        last_click: None,
+        has_tree: !overview,
     };
+    if open_last {
+        if let Some(s) = overview::most_recent(&app.graph) {
+            app.focus_id = app.graph.sessions[s].id.clone();
+            app.sel = Some(Key::Session(app.focus_id.clone()));
+        }
+    }
     app.reset_collapse();
+    if overview {
+        app.picker.recent = last.filter(|&n| n > 1);
+        let entries = app.overview_entries();
+        if app.picker.recent.is_some() && entries.len() == 1 {
+            app.open_entry(entries[0].target); // the last N sessions all live in one tree
+        } else {
+            app.open_overview();
+            app.picker.sel = 0;
+        }
+    }
     if let Some(n) = resolved.notice {
         app.toast(n, Role::Warn);
     }
 
     let mut terminal = ratatui::init();
+    // ratatui's panic hook restores the screen; also give the mouse back to the terminal
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = execute!(std::io::stdout(), DisableMouseCapture);
+        prev(info);
+    }));
+    execute!(std::io::stdout(), EnableMouseCapture)?;
     let result = (|| -> Result<()> {
         loop {
             terminal.draw(|f| crate::ui::draw(f, &mut app))?;
             if event::poll(Duration::from_millis(250))? {
                 match event::read()? {
                     Event::Key(k) => app.on_key(k),
+                    Event::Mouse(m) => app.on_mouse(m),
                     Event::Resize(..) => {}
                     _ => {}
                 }
@@ -732,22 +1018,33 @@ pub fn run(
                     Exec::Resume(id) => vec!["resume", id],
                     Exec::Fork(id) => vec!["fork", id],
                 };
+                execute!(std::io::stdout(), DisableMouseCapture)?;
                 ratatui::restore();
-                let status = Command::new(codex_bin())
-                    .args(&args)
-                    .current_dir(&app.root)
-                    .status();
+                let mut cmd = Command::new(codex_bin());
+                cmd.args(&args);
+                if let Some(dir) = app.exec_dir(&exec) {
+                    cmd.current_dir(dir);
+                }
+                let status = cmd.status();
                 terminal = ratatui::init();
+                execute!(std::io::stdout(), EnableMouseCapture)?;
                 terminal.clear()?;
                 app.after_exec(exec, before, status);
             }
         }
     })();
+    let _ = execute!(std::io::stdout(), DisableMouseCapture);
     ratatui::restore();
     result
 }
 
-pub fn print_tree(home: &Path, session: Option<&str>, width: usize, all: bool) -> Result<()> {
+pub fn print_tree(
+    home: &Path,
+    session: Option<&str>,
+    width: usize,
+    all: bool,
+    compact: bool,
+) -> Result<()> {
     let resolved = resolve_focus(home, session, None)?;
     if let Some(n) = &resolved.notice {
         eprintln!("{n}");
@@ -767,7 +1064,8 @@ pub fn print_tree(home: &Path, session: Option<&str>, width: usize, all: bool) -
         &empty,
         (all, true, all),
         now(),
-    );
+    )
+    .with_compact(compact);
     for r in view.rows(width) {
         println!("{}", plain(&r.line).trim_end());
     }
@@ -776,6 +1074,40 @@ pub fn print_tree(home: &Path, session: Option<&str>, width: usize, all: bool) -
 
 pub fn plain(l: &Line) -> String {
     l.iter().map(|s| s.text.as_str()).collect()
+}
+
+/// Print every fork tree and standalone session in the project.
+pub fn list(home: &Path, project: Option<PathBuf>, all: bool, last: Option<usize>) -> Result<()> {
+    let dir = project.unwrap_or(std::env::current_dir()?);
+    let root = project_root(&dir.to_string_lossy());
+    let (_c, _l, names, graph) = load(home, &root, false, false);
+    if graph.sessions.is_empty() {
+        anyhow::bail!("no Codex sessions found for {}", root.display());
+    }
+    let mut entries = overview::entries(&graph, &names);
+    if let Some(n) = last {
+        let roots = overview::recent_roots(&graph, n);
+        entries.retain(|e| roots.contains(&e.root));
+    }
+    let empty = HashSet::new();
+    let view = View::new(&graph, &names, 0, &empty, &empty, (all, true, all), now());
+    let picker = Picker { hide_standalone: !all, ..Picker::default() };
+    let visible = picker.visible(&entries, all);
+    let width = 100;
+    for r in overview::list_rows(&view, &visible, &root, width) {
+        let mut line = plain(&r.line).trim_end().to_string();
+        if let Some(i) = r.entry {
+            line = format!("{}  {line}", short(&graph.sessions[visible[i].target].id));
+        } else if !line.is_empty() {
+            line = format!("          {}", line.trim_start());
+        }
+        println!("{line}");
+    }
+    let hidden = entries.iter().filter(|e| e.standalone()).count();
+    if !all && hidden > 0 {
+        println!("\n          {hidden} standalone sessions hidden; pass --all to list them");
+    }
+    Ok(())
 }
 
 pub fn index(home: &Path, project: Option<PathBuf>, rebuild: bool) -> Result<()> {

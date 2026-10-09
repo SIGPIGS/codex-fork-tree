@@ -4,17 +4,11 @@
 
 Published copy (private to the owner): https://claude.ai/artifact/Wa73qdMHBjMVrRWwJzh8tP
 
-## Chosen direction: D · Framed trie
+## Chosen direction: E · Outline with fork info
 
-Feedback on the first round: keep Unicode glyphs, and combine the turn trie with the outline. Layout D draws each session that has forks as a frame titled with its name. Inside the frame, the session's fork points run down a spine and its branches hang off them. See [03-ui-style.md](03-ui-style.md#tree-layout-framed-trie-default). D is the demo's default; A and C are kept for comparison, and B was dropped from the page.
+Later feedback: frames felt tight, prompts outshone session names, and a frame's title looked more indented than its own contents. Layout E drops the frames (see [03-ui-style.md](03-ui-style.md#tree-layout-outline-with-fork-info)): one row per session, the fork point on an indented line under each forked session, `+N · age` in one aligned column, and the focus shown by an accent marker, title and path. D (framed) is kept in the demo for comparison (`v`). Comfortable/compact density is toggled with `=`. E is what the Rust TUI implements.
 
-The demo terminal resizes like a real one: drag its corner, or use the size presets (fit, 120×30, 88×30, 56×24). Columns and rows are measured from the box, and the layout re-flows on every change. That matches how the real TUI reacts to SIGWINCH.
-
-Open questions for D:
-
-1. Full boxes or a top label with a left rail (saves the right margin and the bottom row)
-2. Whether off-path frames start folded
-3. Bottom border shows the end turn, or the session's last prompt
+Earlier, D replaced A–C: it combined the turn trie with the outline in framed boxes.
 
 ## First-round layouts
 
