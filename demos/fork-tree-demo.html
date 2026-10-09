@@ -1,0 +1,691 @@
+<title>Fork Tree UI Demos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+/* Layout: page chrome (controls, notes) wraps one fixed-size mock terminal; terminal palettes are explicit per terminal theme. */
+:root {
+  --bg: #e6e9ef; --fg: #4c4f69; --muted: #6c6f85; --line: #ccd0da; --card: #eff1f5; --accent: #fe640b; --accent-ink: #e64553; --on-accent: #11111b;
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  /* terminal palettes */
+  /* dark: Catppuccin Mocha base + neutrals, saturated role hues (orange 30°, green 95°, teal 178°, violet 270°, pink 330°) */
+  --td-bg: #1e1e2e; --td-fg: #cdd6f4; --td-dim: #7f849c; --td-accent: #ff9e44; --td-own: #9be05c; --td-live: #2ed9cf; --td-prompt: #c38bff; --td-inf: #ff6ab8; --td-warn: #ffd43b; --td-danger: #ff5555; --td-sel: #313244; --td-frame: #45475a;
+  /* light: Catppuccin Latte base + neutrals, same hues deepened for contrast on a light background */
+  --tl-bg: #eff1f5; --tl-fg: #4c4f69; --tl-dim: #7c7f93; --tl-accent: #d9480f; --tl-own: #2b8a3e; --tl-live: #0b7f8c; --tl-prompt: #7c3aed; --tl-inf: #c2255c; --tl-warn: #a66a00; --tl-danger: #e03131; --tl-sel: #dce0e8; --tl-frame: #bcc0cc;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11111b; --fg: #cdd6f4; --muted: #a6adc8; --line: #313244; --card: #181825; --accent: #fab387; --accent-ink: #fab387; --on-accent: #11111b; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #11111b; --fg: #cdd6f4; --muted: #a6adc8; --line: #313244; --card: #181825; --accent: #fab387; --accent-ink: #fab387; --on-accent: #11111b; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: grid; gap: 22px; }
+h1 { font-size: 1.55rem; margin: 0; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.lede code, .notes code { font-family: var(--mono); font-size: 0.86em; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+.ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ctl > span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--card); }
+.seg button { font: inherit; font-size: 0.86rem; border: 0; background: transparent; color: var(--fg); padding: 5px 11px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 500; }
+.seg button:focus-visible, .keys button:focus-visible, .term:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.stage { overflow-x: auto; padding-bottom: 4px; }
+.term { display: block; box-sizing: border-box; width: 100%; max-width: 100%; min-width: 220px; min-height: 120px; resize: both; overflow: hidden; position: relative;
+  font-family: var(--mono); font-size: 13.5px; line-height: 1.32; padding: 10px 12px; border-radius: 8px;
+  background: var(--t-bg); color: var(--t-fg); border: 1px solid var(--t-frame); cursor: default; font-variant-ligatures: none; }
+.pal-dark { --t-bg: var(--td-bg); --t-fg: var(--td-fg); --t-dim: var(--td-dim); --t-accent: var(--td-accent); --t-inf: var(--td-inf); --t-live: var(--td-live); --t-warn: var(--td-warn); --t-danger: var(--td-danger); --t-own: var(--td-own); --t-prompt: var(--td-prompt); --t-sel: var(--td-sel); --t-frame: var(--td-frame); }
+.pal-light { --t-bg: var(--tl-bg); --t-fg: var(--tl-fg); --t-dim: var(--tl-dim); --t-accent: var(--tl-accent); --t-inf: var(--tl-inf); --t-live: var(--tl-live); --t-warn: var(--tl-warn); --t-danger: var(--tl-danger); --t-own: var(--tl-own); --t-prompt: var(--tl-prompt); --t-sel: var(--tl-sel); --t-frame: var(--tl-frame); }
+.ln { white-space: pre; height: 1.32em; }
+.measure { position: absolute; visibility: hidden; white-space: pre; }
+.size { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.resize-hint { font-size: 0.82rem; color: var(--muted); }
+@media (max-width: 520px) { .term { font-size: 11px; } }
+/* every non-ASCII glyph is pinned to one cell: the webfont lacks box drawing, so fallback fonts would otherwise drift */
+.g { display: inline-block; width: 1ch; text-align: center; overflow: visible; white-space: pre; }
+.ln { overflow: hidden; }
+.c-dim { color: var(--t-dim); } .c-acc { color: var(--t-accent); } .c-inf { color: var(--t-inf); } .c-live { color: var(--t-live); } .c-own { color: var(--t-own); } .c-prompt { color: var(--t-prompt); }
+.c-warn { color: var(--t-warn); } .c-danger { color: var(--t-danger); } .b { font-weight: 700; }
+.sel { background: var(--t-sel); }
+.hit { cursor: pointer; }
+.term.unfocused .sel { background: color-mix(in srgb, var(--t-sel) 55%, transparent); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--mono); font-size: 0.85rem; padding: 10px 14px; border-radius: 8px; background: var(--t-bg); color: var(--t-fg); border: 1px solid var(--t-frame); }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.keys span { font-size: 0.8rem; color: var(--muted); margin-right: 4px; }
+.keys button { font-family: var(--mono); font-size: 0.8rem; min-width: 2.4em; padding: 3px 8px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--card); color: var(--fg); cursor: pointer; }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; background: var(--card); min-width: 0; }
+.note h3 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.note h3 small { font-family: var(--mono); font-weight: 400; color: var(--muted); font-size: 0.78rem; }
+.note.pick { border-color: var(--accent); }
+.note p { margin: 0 0 8px; color: var(--muted); font-size: 0.92rem; }
+.note ul { margin: 0; padding-left: 18px; font-size: 0.9rem; display: grid; gap: 3px; }
+.tag { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-ink); font-weight: 600; }
+.decide { border-top: 1px solid var(--line); padding-top: 18px; }
+.decide h2 { font-size: 1.05rem; margin: 0 0 8px; font-weight: 600; }
+.decide ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
+.decide li { color: var(--fg); }
+.decide li em { color: var(--muted); font-style: normal; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>codex-fork-tree · UI demos</h1>
+    <p class="lede">The framed trie (D) combines the turn trie and the outline. Each session with forks becomes a frame titled with its name. The frame's own session is marked ▣ in green, while forked sessions are ○ in the normal text color. Inside a frame, the session's fork points (◆ turn N) run down in turn order, and every branch forked from that session hangs off them. A and C are kept for comparison. The layout adapts to whatever size the terminal is. Click the terminal or just start typing: <code>j</code>/<code>k</code> move, <code>h</code>/<code>l</code> fold and unfold a frame, <code>Enter</code> opens the transcript, <code>v</code> cycles layouts, <code>?</code> lists every key. All sessions and prompts are made-up examples.</p>
+  </header>
+
+  <div class="controls">
+    <div class="ctl"><span>Layout</span><div class="seg" data-ctl="layout">
+      <button id="l-D" data-v="D">D · Framed trie</button><button id="l-A" data-v="A">A · Outline</button><button id="l-C" data-v="C">C · Turn trie</button></div></div>
+    <div class="ctl"><span>Size</span><div class="seg" data-ctl="size">
+      <button id="z-fit" data-v="fit">fit</button><button id="z-120" data-v="120x30">120×30</button><button id="z-88" data-v="88x30">88×30</button><button id="z-56" data-v="56x24">56×24</button></div>
+      <span class="size" id="size-readout" aria-live="polite">–</span></div>
+    <div class="ctl"><span>Terminal</span><div class="seg" data-ctl="theme">
+      <button id="t-dark" data-v="dark">Mocha</button><button id="t-light" data-v="light">Latte</button></div></div>
+  </div>
+
+  <p class="resize-hint">Drag the terminal's bottom-right corner to resize it, the same way you would resize a terminal window. The layout re-flows on every size change.</p>
+  <div class="stage"><div id="term" class="term pal-dark" tabindex="0" aria-label="Mock terminal running codex-fork-tree"></div></div>
+
+  <div id="legend" class="legend pal-dark" aria-label="Color legend">
+    <span class="c-acc">● ▣ ┏━┓ focus</span>
+    <span class="c-own">▣ frame owner</span>
+    <span>○ forked session</span>
+    <span class="c-prompt">◆ fork point “prompt”</span>
+    <span class="c-inf">┄ ≈ inferred</span>
+    <span class="c-live">◉ live</span>
+    <span class="c-dim">+16 · 6d metadata</span>
+    <span class="c-warn">⠹ verifying</span>
+    <span class="c-danger">delete</span>
+  </div>
+
+  <div class="keys" aria-label="On-screen keys">
+    <span>Keys</span>
+    <button data-k="k">k ↑</button><button data-k="j">j ↓</button><button data-k="h">h ←</button><button data-k="l">l →</button>
+    <button data-k="Enter">⏎</button><button data-k="F">F</button><button data-k="f">f</button><button data-k="r">r</button><button data-k="n">n</button>
+    <button data-k="a">a</button><button data-k="i">i</button><button data-k="x">x</button><button data-k="X">X</button>
+    <button data-k="z">z</button><button data-k="v">v</button><button data-k="?">?</button><button data-k="Escape">esc</button>
+  </div>
+
+  <section class="notes">
+    <article class="note pick" id="n-D"><div class="tag">Proposed default</div>
+      <h3>D · Framed trie <small>trie inside session frames</small></h3>
+      <p>A frame is one session that has forks. Its top border carries the session's name and length. Inside, a spine lists the session's fork points in turn order, each labeled with the last shared prompt, and the branches hang off each ◆. A branch that has forks of its own becomes a nested frame. The bottom border marks where the session ends.</p>
+      <ul><li>All branches that share a parent session sit inside one box</li><li>Where each fork happened stays visible (◆ with its prompt)</li><li>▣ in green marks the frame's own session; ○ marks a forked session; ● marks the focus session when it's a leaf</li><li>Borders: heavy and accent-colored for the focus session, dashed for inferred forks, thin and dim otherwise</li><li>Each nested frame costs 2 rows and about 6 columns</li></ul></article>
+    <article class="note" id="n-A">
+      <h3>A · Outline <small>reference</small></h3>
+      <p>One row per session, indented under its parent session. The densest layout, but fork points only show as numbers.</p></article>
+    <article class="note" id="n-C">
+      <h3>C · Turn trie <small>reference</small></h3>
+      <p>Fork points as nodes and sessions as leaves. D keeps this structure and adds frames for sessions, so you no longer have to find a session's title at the end of its path.</p></article>
+  </section>
+
+  <section class="decide">
+    <h2>Decisions for you</h2>
+    <ol>
+      <li>Frame borders: full boxes (shown), or only a top label and a left rail to save the right margin and the bottom row. <em>Full boxes are clearer; a rail saves about 6 columns per nesting level.</em></li>
+      <li>Leaf sessions (no forks of their own) stay as plain rows instead of 1-row frames. <em>Suggested: keep them as rows.</em></li>
+      <li>Off-path frames start folded (see “Rewrite compaction ▸ +1”). Should they start expanded instead?</li>
+      <li>Should the bottom border show where the session ends (“ends at turn 64”, shown) or its last prompt?</li>
+      <li>Inferred forks appear dashed after verification. Should they be hidden until you confirm them with <code>x</code>?</li>
+    </ol>
+  </section>
+</div>
+
+<script>
+(() => {
+const TODAY = new Date('2026-10-09T09:00:00');
+// Example data: ids, titles and prompts are invented for the demo.
+const SESS = [
+  { k:'5c1e8a20', id:'5c1e8a20-3d4f-7a10-9b2e-4f6a8c0d1e21', title:'Design the storage engine', parent:null, fork:0, prov:null, created:'2026-10-02T07:14', turns:38, src:'cli', model:'gpt-6 · high', tok:'410k',
+    prompts:{1:'We have a log-structured key-value store prototype; the storage engine is half done and the WAL is missing…',3:'List what the engine needs from the file format.',5:'Sketch an on-disk B-tree index.',9:'Agreed on the format. Now plan the WAL work in stages.'},
+    first:'We have a log-structured key-value store prototype; the storage engine is half done and the WAL is missing…', last:{u:'write the staged plan to docs/wal-plan.md',a:'Done: 5 stages, each ending with a green crash test.'} },
+  { k:'6a2f0b31', id:'6a2f0b31-4e5a-7b21-8c3f-5a7b9d1e2f32', title:'Earlier attempt: direct port', parent:'5c1e8a20', fork:3, prov:'inferred', created:'2026-10-02T08:40', turns:87, src:'cli', model:'gpt-6 · medium', tok:'1.0M', pending:true,
+    first:'Skip the plan. Port the WAL from the old prototype file by file.', last:{u:'how many files still fail to build?',a:'4 of 9. Most failures come from the new record framing.'} },
+  { k:'3e9d7a10', id:'3e9d7a10-1f2b-7c3d-8e4f-0a1b2c3d4e5f', title:'Abandoned: B-tree sketch', parent:'5c1e8a20', fork:5, prov:'native', archived:true, created:'2026-10-02T08:55', turns:12, src:'cli', model:'gpt-6 · high', tok:'96k',
+    first:'Go with 4 KiB B-tree pages and show me the node layout.', last:{u:'never mind, park this',a:'Parked. The sketch is in scratch/btree.md.'} },
+  { k:'7b3a1c42', id:'7b3a1c42-5f6b-7c32-9d4a-6b8cae2f3a43', title:'Implement WAL replay', parent:'5c1e8a20', fork:9, prov:'native', created:'2026-10-02T09:18', turns:64, src:'cli', model:'gpt-6 · high', tok:'780k',
+    prompts:{11:'Stage 1 passes. Before stage 2, review the compaction module.',14:'Run the crash-recovery tests and report what fails.'},
+    first:'Start stage 1: write the WAL record format.', last:{u:'stage 3 done?',a:'Yes. 38/40 crash tests pass; the 2 failures lose the last write.'} },
+  { k:'8c4b2d53', id:'8c4b2d53-6a7c-7d43-ae5b-7c9dbf3a4b54', title:'Rewrite compaction', parent:'7b3a1c42', fork:11, prov:'inferred', created:'2026-10-02T19:32', turns:51, src:'cli', model:'gpt-6 · high', tok:'640k', pending:true,
+    prompts:{20:'Merging is still too slow. Can we bound it?'},
+    first:'Rewrite compaction to merge runs lazily.', last:{u:'compare write amplification',a:'Lazy merging cuts write amplification by 30%.'} },
+  { k:'9d5c3e64', id:'9d5c3e64-7b8d-7e54-bf6c-8daec04b5c65', title:'Compaction: try leveled', parent:'8c4b2d53', fork:20, prov:'native', created:'2026-10-02T22:05', turns:34, src:'cli', model:'gpt-6 · high', tok:'350k',
+    first:'Try leveled compaction with 10x fan-out.', last:{u:'is read amplification better?',a:'Yes, but writes go up 2x; see the table in docs/compaction.md.'} },
+  { k:'ae6d4f75', id:'ae6d4f75-8c9e-7f65-80d7-9ebfd15c6d76', title:'Benchmark write stalls', parent:'7b3a1c42', fork:14, prov:'native', created:'2026-10-03T05:10', turns:30, src:'cli', model:'gpt-6 · medium', tok:'220k',
+    first:'Find which commit made write stalls longer.', last:{u:'result?',a:'It was the commit that added per-level locks.'} },
+  { k:'bf7e5086', id:'bf7e5086-9daf-7076-91e8-afc0e26d7e87', title:'Explain fsync ordering', parent:'7b3a1c42', fork:14, prov:'native', created:'2026-10-03T06:59', turns:142, src:'cli', model:'gpt-6 · high', tok:'1.2M',
+    prompts:{19:'So the directory entry is not synced?'},
+    first:'Explain in detail why fsync ordering loses the last write after a crash.', last:{u:'so the fix is one extra fsync on the directory per rotation?',a:'Yes, and it only runs when the WAL segment rotates.'} },
+  { k:'c08f6197', id:'c08f6197-aeb0-7187-a2f9-b0d1f37e8f98', title:'fsync: batch alternative', parent:'bf7e5086', fork:19, prov:'recorded', live:true, created:'2026-10-09T08:02', turns:23, src:'cli', model:'gpt-6 · high', tok:'190k',
+    first:'Sync the directory in a batch instead of per write.', last:{u:'run the crash suite again',a:'Running… 9/14 done so far, all passing.'} },
+];
+const byK = Object.fromEntries(SESS.map(s => [s.k, s]));
+const FOCUS0 = 'bf7e5086';
+
+const st = {
+  layout:'D', width:120, theme:'dark', ascii:false, focus:FOCUS0, selKey:'s:'+FOCUS0,
+  collapsed:new Set(), show:{arch:false, inf:true}, confirmed:new Set(), rejected:new Set(),
+  overlay:null, tScroll:0, toast:'', toastUntil:0, verifying:true, spin:0, fresh:new Map(), lastG:0, scroll:0, focused:false,
+};
+st.rows = 30;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- model ----------
+const visible = s => {
+  if (!s) return false;
+  if (s.archived && !st.show.arch) return false;
+  if (st.rejected.has(s.k)) return false;
+  if (s.pending && st.verifying) return false;
+  if (s.prov === 'inferred' && !st.confirmed.has(s.k) && !st.show.inf) return false;
+  return s.parent ? visible(byK[s.parent]) : true;
+};
+const prov = s => st.confirmed.has(s.k) ? 'confirmed' : s.prov;
+const kids = (s, desc) => SESS.filter(c => c.parent === s.k && visible(c))
+  .sort((a, b) => desc ? (b.fork - a.fork || a.created.localeCompare(b.created)) : (a.fork - b.fork || a.created.localeCompare(b.created)));
+const descCount = s => kids(s).reduce((n, c) => n + 1 + descCount(c), 0);
+const ancestors = k => { const out = []; let s = byK[k]; while (s) { out.push(s.k); s = byK[s.parent]; } return out; };
+const prompt = (s, t) => (t <= s.fork && s.parent) ? prompt(byK[s.parent], t) : (s.prompts && s.prompts[t]) || (t === s.fork + 1 ? s.first : 'turn ' + t);
+const rel = iso => { const d = (TODAY - new Date(iso)) / 36e5; return d < 1 ? 'now' : d < 24 ? Math.round(d) + 'h' : d < 24 * 7 ? Math.round(d / 24) + 'd' : Math.round(d / 168) + 'w'; };
+const root = SESS.find(s => !s.parent);
+function resetCollapse() {
+  const keep = new Set(ancestors(st.focus));
+  st.collapsed = new Set(SESS.filter(s => !keep.has(s.k) && SESS.some(c => c.parent === s.k)).map(s => s.k));
+}
+resetCollapse();
+
+// ---------- text helpers ----------
+const len = t => Array.from(t).length;
+const S = (t, c) => ({ t, c });
+function fit(segs, w) {
+  const out = []; let n = 0;
+  for (const sg of segs) {
+    if (n >= w) break;
+    let chars = Array.from(sg.t);
+    if (n + chars.length > w) chars = chars.slice(0, Math.max(0, w - n - 1)).concat(['…']);
+    out.push({ ...sg, t: chars.join('') }); n += chars.length;
+  }
+  if (n < w) out.push(S(' '.repeat(w - n)));
+  return out;
+}
+function lr(left, right, w) {
+  const rl = right.reduce((n, s) => n + len(s.t), 0);
+  if (rl + 8 > w) return fit(left, w);
+  return [...fit(left, w - rl - 1), S(' '), ...right];
+}
+function wrap(text, w) {
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const wd of words) { if (len(cur) + len(wd) + (cur ? 1 : 0) > w) { if (cur) lines.push(cur); cur = wd; } else cur = cur ? cur + ' ' + wd : wd; }
+  if (cur) lines.push(cur); return lines;
+}
+const blank = w => [S(' '.repeat(w))];
+const markSel = segs => segs.map(s => ({ ...s, sel: true }));
+
+// ---------- markers ----------
+function marker(s) {
+  if (s.k === st.focus) return S('●', 'c-acc b');
+  if (s.live) return S('◉', 'c-live');
+  if (s.archived) return S('◌', 'c-dim');
+  return S('○');
+}
+function forkLabel(s) {
+  if (!s.parent) return [S('root', 'c-dim')];
+  const p = prov(s);
+  if (p === 'inferred') return [S('≈ turn ' + s.fork, 'c-inf')];
+  return [S('⑂ turn ' + s.fork + (p === 'confirmed' ? ' ✓' : ''))];
+}
+const own = (s, from) => s.sub ? s.turns : s.turns - from;
+const edgeCls = s => prov(s) === 'inferred' ? 'c-inf' : 'c-dim';
+const edgeCh = s => prov(s) === 'inferred' ? '┄' : '─';
+const gutter = s => st.fresh.has(s.k) ? S('+', 'c-live') : S(' ');
+const titleSeg = s => S(s.title, s.k === st.focus ? 'b' : st.fresh.has(s.k) ? 'c-live' : s.sub || s.archived ? 'c-dim' : '');
+
+// ---------- rows per layout ----------
+function treeRows(desc) {
+  const rows = [];
+  (function walk(s, guide, last, depth, parentKey) {
+    const ks = kids(s, desc); const folded = st.collapsed.has(s.k) && ks.length;
+    const row = { key: 's:' + s.k, s, depth, guide, last, parentKey, folded: folded ? descCount(s) : 0, idx: rows.length };
+    rows.push(row);
+    if (folded) return;
+    ks.forEach((c, i) => walk(c, depth === 0 ? '' : guide + (last ? '  ' : '│ '), i === ks.length - 1, depth + 1, row.key));
+  })(root, '', true, 0, null);
+  return rows;
+}
+function rowsA(w) {
+  return treeRows(false).map(r => {
+    const s = r.s;
+    const left = [gutter(s)];
+    if (r.depth > 0) { left.push(S(r.guide, 'c-dim')); left.push(S((r.last ? '└' : '├') + edgeCh(s), edgeCls(s))); }
+    left.push(marker(s), S(' '), titleSeg(s));
+    if (r.folded) left.push(S(' ▸ +' + r.folded, 'c-dim'));
+    const right = [...forkLabel(s), S(' · ', 'c-dim'), S(rel(s.created).padStart(3), 'c-dim')];
+    return { ...r, segs: lr(left, right, w) };
+  });
+}
+function rowsB(w) {
+  const rows = treeRows(true);
+  const BW = Math.max(14, Math.min(46, w - 30));
+  const maxT = Math.max(...rows.map(r => r.s.turns));
+  const col = t => Math.round(Math.sqrt(t / maxT) * (BW - 2));
+  const grid = rows.map(() => Array.from({ length: BW }, () => S(' ')));
+  const idx = Object.fromEntries(rows.map((r, i) => [r.key, i]));
+  rows.forEach((r, i) => {
+    const s = r.s, inf = prov(s) === 'inferred', thin = s.sub;
+    const start = s.parent ? col(s.fork) : 0; const end = Math.max(col(s.turns), start + 2);
+    const bc = inf ? 'c-inf' : thin ? 'c-dim' : s.k === st.focus ? 'c-acc' : '';
+    if (s.parent) grid[i][start] = S('╰', inf ? 'c-inf' : 'c-dim');
+    for (let c = s.parent ? start + 1 : 0; c < end; c++) grid[i][c] = S(inf ? '┄' : thin ? '─' : '━', bc);
+    grid[i][end] = marker(s);
+    if (r.folded && end + 1 < BW) grid[i][end + 1] = S('▸', 'c-dim');
+    if (r.parentKey) for (let j = idx[r.parentKey] + 1; j < i; j++) {
+      const cell = grid[j][start];
+      if (cell.t === ' ') grid[j][start] = S(inf ? '┆' : '│', inf ? 'c-inf' : 'c-dim');
+      else if ('━┄─'.includes(cell.t)) grid[j][start] = S('┿', 'c-dim');
+    }
+  });
+  const ticks = Array.from({ length: BW }, () => ' ');
+  [1, 10, 25, 50, 100, 200].filter(t => t <= maxT).forEach(t => { const c = col(t), lab = String(t); if (c + lab.length <= BW && ticks.slice(c, c + lab.length + 1).every(x => x === ' ')) lab.split('').forEach((ch, o) => ticks[c + o] = ch); });
+  const ruler = { ruler: true, segs: fit([S(' '), S(ticks.join(''), 'c-dim'), S(' turns →', 'c-dim')], w) };
+  return [ruler, ...rows.map((r, i) => {
+    const s = r.s;
+    const left = [gutter(s), ...grid[i], S(' '), titleSeg(s)];
+    if (r.folded) left.push(S(' +' + r.folded, 'c-dim'));
+    return { ...r, segs: lr(left, forkLabel(s), w) };
+  })];
+}
+function rowsC(w) {
+  const rows = [];
+  const q = t => '“' + t + '”';
+  (function chain(s, from, guide, conn, connCls, parentKey) {
+    const ks = kids(s).filter(c => c.fork > from);
+    const forks = [...new Set(ks.map(c => c.fork))].sort((a, b) => a - b);
+    const pre = [gutter(s), S(guide, 'c-dim'), S(conn, connCls)];
+    if (!forks.length) {
+      rows.push({ key: 's:' + s.k, s, parentKey, segs: lr([...pre, marker(s), S(' '), titleSeg(s), S('  +' + own(s, from), 'c-dim')], [S(rel(s.created).padStart(3), 'c-dim')], w) });
+      return;
+    }
+    const t = forks[0], fk = 'f:' + s.k + ':' + t;
+    rows.push({ key: fk, fork: { s, t, from }, parentKey,
+      segs: lr([...pre, S('◆ ', 'c-prompt'), S('turn ' + t + ' ', 'c-dim'), S(q(prompt(s, t)), 'c-prompt')], [S('+' + (t - from) + ' turns', 'c-dim')], w) });
+    const branches = [s, ...ks.filter(c => c.fork === t)];
+    const g2 = guide + (conn ? (conn[0] === '└' ? '  ' : '│ ') : '');
+    branches.forEach((b, j) => {
+      const isCont = j === 0; const lastB = j === branches.length - 1;
+      chain(b, t, g2, (lastB ? '└' : '├') + (isCont ? '─' : edgeCh(b)), isCont ? 'c-dim' : edgeCls(b), fk);
+    });
+  })(root, 0, '', '', '', null);
+  return rows;
+}
+
+function rowsD(w) {
+  const q = t => '“' + t + '”';
+  const box = s => s.k === st.focus ? { tl:'┏', tr:'┓', bl:'┗', br:'┛', h:'━', v:'┃', c:'c-acc' }
+    : prov(s) === 'inferred' ? { tl:'╭', tr:'╮', bl:'╰', br:'╯', h:'┄', v:'┆', c:'c-inf' }
+    : { tl:'╭', tr:'╮', bl:'╰', br:'╯', h:'─', v:'│', c:'c-dim' };
+  const meta = (s, from) => [...(prov(s) === 'inferred' ? [S('≈ ', 'c-inf')] : []), S('+' + own(s, from), 'c-dim'), S(' · ', 'c-dim'), S(rel(s.created).padStart(3), 'c-dim')];
+  const framed = s => kids(s).length > 0 && !st.collapsed.has(s.k);
+  // the session a frame belongs to gets ▣ in the owner color, so it never reads as one of its branches (○)
+  const ownerMark = s => S('▣', s.k === st.focus ? 'c-acc b' : s.live ? 'c-live' : 'c-own');
+  function leaf(b, from, W, conn, connCls, parentKey) {
+    const left = [S(conn, connCls), marker(b), S(' '), titleSeg(b)];
+    const n = descCount(b); if (n) left.push(S(' ▸ +' + n, 'c-dim'));
+    return { key: 's:' + b.k, s: b, parentKey, segs: lr(left, meta(b, from), W) };
+  }
+  // returns rows exactly FW wide: top border (selectable session row), spine rows, bottom border
+  function frame(s, from, FW, parentKey) {
+    const bx = box(s), key = 's:' + s.k, rows = [];
+    const lab = meta(s, from), labLen = lab.reduce((n, x) => n + len(x.t), 0);
+    const tMax = Math.max(4, FW - 11 - labLen);
+    const title = fit([S(s.title, s.k === st.focus ? 'c-own b' : 'c-own')], Math.min(len(s.title), tMax));
+    const fill = FW - 10 - Math.min(len(s.title), tMax) - labLen;
+    rows.push({ key, s, parentKey, segs: [S(bx.tl + bx.h + ' ', bx.c), ownerMark(s), S(' '), ...title, S(' ' + bx.h.repeat(Math.max(1, fill)) + ' ', bx.c), ...lab, S(' ' + bx.h + bx.tr, bx.c)] });
+    const IW = FW - 4, inner = [];
+    const ks = kids(s).filter(c => c.fork > from);
+    const forks = [...new Set(ks.map(c => c.fork))].sort((a, b) => a - b);
+    let prev = from;
+    forks.forEach((t, fi) => {
+      const fk = 'f:' + s.k + ':' + t;
+      inner.push({ key: fk, fork: { s, t, from: prev }, parentKey: key,
+        segs: lr([S('◆ ', 'c-prompt'), S('turn ' + t + ' ', 'c-dim'), S(q(prompt(s, t)), 'c-prompt')], [S('+' + (t - prev) + ' turns', 'c-dim')], IW) });
+      prev = t;
+      const br = ks.filter(c => c.fork === t);
+      br.forEach((b, j) => {
+        const last = fi === forks.length - 1 && j === br.length - 1;
+        const conn = (last ? '└' : '├') + edgeCh(b), cls = edgeCls(b), cont = last ? '  ' : '│ ';
+        // too narrow for another frame: fold it into a leaf row
+        if (framed(b) && IW - 2 >= 30) frame(b, t, IW - 2, fk).forEach((r, i) => inner.push({ ...r, segs: [S(i ? cont : conn, i ? 'c-dim' : cls), ...r.segs] }));
+        else inner.push(leaf(b, t, IW, conn, cls, fk));
+      });
+    });
+    inner.forEach(r => rows.push({ ...r, segs: [S(bx.v + ' ', bx.c), ...r.segs, S(' ' + bx.v, bx.c)] }));
+    const end = ' ends at turn ' + s.turns + ' ';
+    rows.push({ border: true, segs: [S(bx.bl + bx.h.repeat(Math.max(1, FW - 3 - len(end))), bx.c), S(end, 'c-dim'), S(bx.h + bx.br, bx.c)] });
+    return rows;
+  }
+  // one column of air between the outer frame and the pane divider
+  return (framed(root) ? frame(root, 0, w - 1, null) : [leaf(root, 0, w - 1, '', '', null)]).map(r => ({ ...r, segs: [...r.segs, S(' ')] }));
+}
+
+// ---------- details ----------
+function details(row, w) {
+  const L = [];
+  const push = segs => L.push(fit(segs, w));
+  if (!row) return L;
+  if (row.fork) {
+    const { s, t, from } = row.fork;
+    const br = [s, ...kids(s).filter(c => c.fork === t)];
+    push([S('Fork point', 'b'), S('  ·  turn ' + t, 'c-dim')]);
+    push([S('in ' + s.k + ' ' + s.title, 'c-dim')]);
+    push([]);
+    push([S('LAST SHARED PROMPT', 'c-dim')]);
+    wrap(prompt(s, t), w - 4).slice(0, 3).forEach(l => push([S('  ' + l)]));
+    push([]);
+    push([S('BRANCHES  ', 'c-dim'), S(String(br.length), 'c-dim')]);
+    br.forEach((b, j) => push([S('  '), marker(b), S(' '), titleSeg(b), S(j === 0 ? '  (continues)' : '  ' + (prov(b) === 'inferred' ? '≈ inferred' : prov(b)), j === 0 ? 'c-dim' : prov(b) === 'inferred' ? 'c-inf' : 'c-dim')]));
+    push([]);
+    push([S('shared before this point: ' + t + ' turns', 'c-dim')]);
+    return L;
+  }
+  const s = row.s, p = byK[s.parent];
+  const badge = s.k === st.focus ? S((lastRows.some(r => r.key === 's:' + s.k) && st.layout === 'D' && kids(s).length && !st.collapsed.has(s.k) ? '▣' : '●') + ' focus', 'c-acc') : s.live ? S('◉ live', 'c-live') : s.archived ? S('◌ archived', 'c-dim') : s.sub ? S('↳ subagent', 'c-dim') : S('');
+  L.push(lr([S(s.title, 'b')], [badge], w));
+  L.push(lr([S(s.id, 'c-dim')], [S(s.src + ' · ' + s.model, 'c-dim')], w));
+  push([S(s.created.replace('T', ' ') + ' · ' + rel(s.created) + ' ago · ' + s.turns + ' turns · ' + s.tok + ' tok', 'c-dim')]);
+  push([]);
+  if (p) {
+    push([S('FORK', 'c-dim')]);
+    L.push(lr([S('  from   '), S(p.k + ' ', 'c-dim'), S(p.title)], [S(prov(s), prov(s) === 'inferred' ? 'c-inf' : 'c-dim')], w));
+    push([S('  after  turn ' + s.fork + '  '), S('“' + prompt(p, s.fork) + '”', 'c-dim')]);
+    push([S('  shared ' + s.fork + ' turns · own ' + (s.turns - s.fork) + ' turns')]);
+    if (prov(s) === 'inferred') push([S('  match  normalized prefix · ', 'c-inf'), S('x', 'c-acc'), S(' confirm  ', 'c-inf'), S('X', 'c-acc'), S(' reject', 'c-inf')]);
+  } else push([S('ROOT', 'c-dim'), S('  first prompt of every session in this tree', 'c-dim')]);
+  const sib = p ? kids(p).filter(c => c.k !== s.k).length : 0;
+  push([S('  children ' + kids(s).length + ' · siblings ' + sib, 'c-dim')]);
+  push([]);
+  push([S(p ? 'FIRST OWN PROMPT' : 'FIRST PROMPT', 'c-dim')]);
+  wrap(s.first, w - 9).slice(0, 2).forEach((l, i) => push([S(i ? '         ' : '  you    ', 'c-acc'), S(l)]));
+  push([]);
+  push([S('LAST EXCHANGE', 'c-dim')]);
+  push([S('  you    ', 'c-acc'), S(s.last.u)]);
+  wrap(s.last.a, w - 9).slice(0, 2).forEach((l, i) => push([S(i ? '         ' : '  codex  ', 'c-dim'), S(l)]));
+  push([]);
+  push([S('r', 'c-acc'), S(' resume  '), S('n', 'c-acc'), S(' fork  '), S('t', 'c-acc'), S(' transcript  '), S('f', 'c-acc'), S(' focus  '), S('y', 'c-acc'), S(' copy id')]);
+  return L;
+}
+
+// ---------- transcript ----------
+function transcript(s, w) {
+  const L = [], push = segs => L.push(fit(segs, w));
+  const chain = ancestors(s.k).reverse().map(k => byK[k]);
+  push([S(' '), S(s.title, 'b'), S(' · ' + s.k + ' · ' + s.turns + ' turns', 'c-dim')]);
+  push([S(' ▸ 3 context items hidden (AGENTS.md, environment, instructions)', 'c-dim')]);
+  push([]);
+  if (s.parent) {
+    const parts = chain.slice(0, -1).map((a, i) => a.title + ' (' + (i ? chain[i].fork + 1 : 1) + '–' + chain[i + 1].fork + ')');
+    push([S(' ┄ ' + s.fork + ' shared turns · ' + parts.join(' → '), 'c-dim')]);
+    push([S('   you   ', 'c-dim'), S('turn ' + s.fork + '  ', 'c-dim'), S(prompt(byK[s.parent], s.fork), 'c-dim')]);
+    const sibs = kids(byK[s.parent]).filter(c => c.fork === s.fork && c.k !== s.k).length;
+    const lab = ' forked after turn ' + s.fork + ' · ' + (sibs ? sibs + ' sibling branch' + (sibs > 1 ? 'es' : '') : 'no siblings') + ' ';
+    const side = Math.max(2, Math.floor((w - len(lab)) / 2));
+    push([S('─'.repeat(side) + lab + '─'.repeat(side), 'c-prompt')]);
+  }
+  const t0 = s.fork + 1;
+  push([S('   you   ', 'c-acc'), S('turn ' + t0 + '  ', 'c-dim'), S(s.first)]);
+  push([S('   codex      '), S('Let me look at the relevant code first.')]);
+  push([S('   ▸ tool  ', 'c-dim'), S('exec_command  rg -n "fsync" src/ tests/', 'c-dim'), S('  (14 lines)', 'c-dim')]);
+  push([S('   ▸ tool  ', 'c-dim'), S('read_file  src/wal/segment.rs', 'c-dim'), S('  (220 lines)', 'c-dim')]);
+  push([S('   codex      '), S('Here is what I found; the short version comes first.')]);
+  push([]);
+  const mid = s.turns - t0 - 1;
+  if (mid > 0) push([S(' ┄ ' + mid + ' more turns  ', 'c-dim'), S('{', 'c-acc'), S('/', 'c-dim'), S('}', 'c-acc'), S(' jump by user turn', 'c-dim')]);
+  push([]);
+  push([S('   you   ', 'c-acc'), S('turn ' + s.turns + '  ', 'c-dim'), S(s.last.u)]);
+  wrap(s.last.a, w - 14).forEach((l, i) => push([S(i ? '              ' : '   codex      '), S(l)]));
+  return L;
+}
+
+// ---------- help ----------
+const HELP = [
+  ['j k ↑ ↓', 'move'], ['h l ← →', 'fold frame / parent · unfold / child'], ['[ ]', 'previous / next sibling'], ['gg G', 'first / last'], ['p F', 'parent · back to focus'],
+  ['⏎ t', 'transcript (narrow: details first)'], ['r', 'resume in codex'], ['n', 'fork in codex'], ['f', 'make selected the focus'], ['m c', 'mark · compare'],
+  ['a i', 'archived · inferred'], ['x X', 'confirm / reject inferred fork'], ['z Z', 'fold off-path · expand all'], ['R A D', 'rename · archive · delete'],
+  ['y Y', 'copy id · copy path'], ['/', 'search'], ['v', 'cycle layout'], ['Ctrl-r', 're-verify'], ['q esc', 'close / quit'],
+];
+
+// ---------- compose screen ----------
+let lastRows = [];
+function screen() {
+  const W = st.width, L = [];
+  if (W < 40 || st.rows < 12) {
+    const msg = ['terminal too small', W + '×' + st.rows + ' · needs 40×12'];
+    return Array.from({ length: st.rows }, (_, i) => {
+      const m = msg[i - Math.floor(st.rows / 2) + 1];
+      return m ? fit([S(' '.repeat(Math.max(0, Math.floor((W - len(m)) / 2)))), S(m, i === Math.floor(st.rows / 2) - 1 ? 'c-warn' : 'c-dim')], W) : blank(W);
+    });
+  }
+  const compact = st.rows < 20;
+  const fs = byK[st.focus];
+  L.push(lr([S(' codex-fork-tree', 'c-acc b'), S(' · ~/kvstore · focus ', 'c-dim'), S(fs.k, 'c-acc'), S(' '), S(fs.title)], [S('view ' + st.layout + ' ', 'c-dim')], W));
+  const chip = (name, on) => [S('[', 'c-dim'), S(name + (on ? ' on' : ' off'), on ? 'c-acc' : 'c-dim'), S('] ', 'c-dim')];
+  const spin = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'[st.spin % 10];
+  const status = st.verifying ? [S(spin + ' verifying 4/11 ', 'c-warn')] : [S('indexed just now ', 'c-dim')];
+  if (compact) L[0] = lr([S(' codex-fork-tree', 'c-acc b'), S(' · focus ', 'c-dim'), S(fs.k, 'c-acc'), S(' '), S(fs.title)], status, W);
+  else {
+    L.push(lr([S(' '), ...chip('archived', st.show.arch), ...chip('inferred', st.show.inf)], status, W));
+    L.push(fit([S(' anchor ⌂ ', 'c-dim'), S('“' + root.first + '”', 'c-dim')], W));
+  }
+  L.push([S('─'.repeat(W), 'c-dim')]);
+  const bodyH = st.rows - L.length - 2;
+  const narrow = W < 60, stacked = !narrow && W < 100;
+  const split = { A: 0.47, B: 0.6, C: 0.56, D: 0.6 }[st.layout];
+  const body = [];
+
+  if (st.overlay === 'transcript' || st.overlay === 'help' || (st.overlay === 'details' && narrow)) {
+    let lines;
+    if (st.overlay === 'help') {
+      const cw = Math.floor((W - 2) / 2); lines = [fit([S(' Keys', 'b'), S('  ·  esc closes', 'c-dim')], W), blank(W)];
+      const half = Math.ceil(HELP.length / 2);
+      for (let i = 0; i < half; i++) {
+        const cell = h => h ? fit([S('  ' + h[0].padEnd(10), 'c-acc'), S(h[1])], cw) : blank(cw);
+        lines.push([...cell(HELP[i]), S('  '), ...cell(HELP[i + half])]);
+      }
+    } else {
+      const row = lastRows.find(r => r.key === st.selKey);
+      const s = row && row.s ? row.s : row && row.fork ? row.fork.s : fs;
+      lines = st.overlay === 'details' ? details(row, W - 2).map(l => [S(' '), ...l]) : transcript(s, W);
+      if (st.overlay === 'transcript') { st.tScroll = Math.max(0, Math.min(st.tScroll, lines.length - bodyH)); lines = lines.slice(st.tScroll); }
+    }
+    for (let i = 0; i < bodyH; i++) body.push(lines[i] ? fit(lines[i], W) : blank(W));
+  } else {
+    const tw = narrow || stacked ? W : Math.floor((W - 1) * split);
+    const dw = narrow ? 0 : stacked ? W : W - tw - 1;
+    const rows = st.layout === 'A' ? rowsA(tw) : st.layout === 'B' ? rowsB(tw) : st.layout === 'D' ? rowsD(tw) : rowsC(tw);
+    lastRows = rows.filter(r => !r.ruler && !r.border);
+    if (!lastRows.some(r => r.key === st.selKey)) st.selKey = lastRows.find(r => r.key === 's:' + st.focus) ? 's:' + st.focus : lastRows[0].key;
+    const treeH = narrow ? bodyH : stacked ? bodyH - Math.min(11, Math.floor(bodyH * 0.4)) : bodyH;
+    const fixed = rows.filter(r => r.ruler), scrollable = rows.filter(r => !r.ruler);
+    const selAt = scrollable.findIndex(r => r.key === st.selKey);
+    const viewH = treeH - fixed.length;
+    const si = selAt;
+    if (!Number.isFinite(st.scroll)) st.scroll = 0;
+    if (si < st.scroll) st.scroll = si; if (si >= st.scroll + viewH) st.scroll = si - viewH + 1;
+    st.scroll = Math.max(0, Math.min(st.scroll, Math.max(0, scrollable.length - viewH)));
+    const treeLines = [...fixed.map(r => ({ segs: r.segs })), ...scrollable.slice(st.scroll, st.scroll + viewH).map(r => ({ key: r.key, segs: r.key === st.selKey ? markSel(r.segs) : r.segs }))];
+    if (!lastRows.some(r => r.s && r.s.k !== st.focus)) treeLines.push({ segs: fit([S('   No forks share history with this conversation.', 'c-dim')], tw) });
+    while (treeLines.length < treeH) treeLines.push({ segs: blank(tw) });
+    const selRow = lastRows.find(r => r.key === st.selKey);
+    const det = narrow ? [] : details(selRow, dw - 2).map(l => [S(' '), ...l, S(' ')]);
+    if (narrow) treeLines.forEach(t => body.push({ key: t.key, segs: t.segs }));
+    else if (stacked) {
+      treeLines.forEach(t => body.push({ key: t.key, segs: t.segs }));
+      body.push([S('─'.repeat(W), 'c-dim')]);
+      for (let i = 0; i < bodyH - treeH - 1; i++) body.push(det[i] ? fit(det[i], W) : blank(W));
+    } else {
+      treeLines.forEach((t, i) => body.push({ key: t.key, segs: t.segs, rest: [S('│', 'c-dim'), ...(det[i] ? fit(det[i], dw) : blank(dw))] }));
+    }
+  }
+  L.push(...body);
+  L.push([S('─'.repeat(W), 'c-dim')]);
+  const hints = st.overlay ? [S(' j/k scroll  {/} user turn  r resume  n fork  esc close', 'c-dim')]
+    : [S(' j/k', 'c-acc'), S(' move  '), S('⏎', 'c-acc'), S(' open  '), S('r', 'c-acc'), S(' resume  '), S('n', 'c-acc'), S(' fork  '), S('f', 'c-acc'), S(' focus  '), S('v', 'c-acc'), S(' view  '), S('?', 'c-acc'), S(' help')];
+  const right = st.toast && Date.now() < st.toastUntil ? [S(st.toast + ' ', 'c-acc')] : [S(lastRows.filter(r => r.s).length + ' shown · ' + SESS.length + ' in project ', 'c-dim')];
+  L.push(lr(hints, right, W));
+  return L;
+}
+
+// ---------- render ----------
+const ASCII = { '├':'|','└':'`','│':'|','─':'-','┄':'.','●':'*','○':'o','◉':'@','◌':'.','◆':'+','⌂':'^','⑂':'Y','≈':'~','↳':'>','━':'=','╰':'`','┿':'+','┆':':','▸':'>','·':'.','…':'~','✓':'v','“':'"','”':'"','→':'>','⏎':'^','↑':'^','↓':'v','←':'<' };
+const esc = c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c;
+function segHTML(sg) {
+  let out = '';
+  for (let ch of sg.t) {
+    if (st.ascii && ASCII[ch]) ch = ASCII[ch];
+    if (/[⠀-⣿]/.test(ch) && st.ascii) ch = '*';
+    const cp = ch.codePointAt(0);
+    out += cp > 127 ? '<span class="g">' + esc(ch) + '</span>' : esc(ch);
+  }
+  const cls = [sg.c, sg.sel ? 'sel' : ''].filter(Boolean).join(' ');
+  return cls ? '<span class="' + cls + '">' + out + '</span>' : out;
+}
+const term = document.getElementById('term');
+function render() {
+  document.getElementById('legend').className = 'legend pal-' + st.theme;
+  term.className = 'term pal-' + st.theme + (st.focused ? '' : ' unfocused');
+  term.innerHTML = screen().map(line => {
+    if (Array.isArray(line)) return '<div class="ln">' + line.map(segHTML).join('') + '</div>';
+    const left = line.segs.map(segHTML).join('');
+    const l = line.key ? '<span class="hit" data-key="' + line.key + '">' + left + '</span>' : left;
+    return '<div class="ln">' + l + (line.rest ? line.rest.map(segHTML).join('') : '') + '</div>';
+  }).join('');
+  document.getElementById('size-readout').textContent = st.width + ' × ' + st.rows;
+  for (const [ctl, v] of [['layout', st.layout], ['theme', st.theme]])
+    document.querySelectorAll('[data-ctl="' + ctl + '"] button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  ['D', 'A', 'C'].forEach(x => document.getElementById('n-' + x).style.outline = st.layout === x ? '2px solid var(--accent)' : 'none');
+}
+
+// ---------- actions ----------
+function toast(msg) { st.toast = msg; st.toastUntil = Date.now() + 2600; setTimeout(render, 2700); }
+const selRow = () => lastRows.find(r => r.key === st.selKey);
+const selSess = () => { const r = selRow(); return r && (r.s || (r.fork && r.fork.s)); };
+function move(d) { const i = lastRows.findIndex(r => r.key === st.selKey); const j = Math.max(0, Math.min(lastRows.length - 1, i + d)); st.selKey = lastRows[j].key; }
+function verify() {
+  st.verifying = true; render();
+  setTimeout(() => {
+    st.verifying = false;
+    SESS.filter(s => s.pending).forEach(s => st.fresh.set(s.k, Date.now()));
+    render();
+    setTimeout(() => { st.fresh.clear(); render(); }, 2200);
+  }, 2600);
+}
+function key(k, e) {
+  const narrow = st.width < 60;
+  if (st.overlay) {
+    if (k === 'Escape' || k === 'q') { st.overlay = null; }
+    else if (st.overlay === 'transcript') {
+      if (k === 'j' || k === 'ArrowDown') st.tScroll++; else if (k === 'k' || k === 'ArrowUp') st.tScroll--;
+      else if (k === 'G') st.tScroll = 99; else if (k === 'g') st.tScroll = 0;
+      else if (k === 'r' || k === 'n') { st.overlay = null; return key(k, e); }
+      else return false;
+    } else if (st.overlay === 'details') {
+      if (k === 'Enter' || k === 't') { st.overlay = 'transcript'; st.tScroll = 0; } else if (k === 'r' || k === 'n') { st.overlay = null; return key(k, e); } else return false;
+    } else if (k !== '?') return false; else st.overlay = null;
+    render(); return true;
+  }
+  const r = selRow(), s = selSess();
+  switch (k) {
+    case 'j': case 'ArrowDown': move(1); break;
+    case 'k': case 'ArrowUp': move(-1); break;
+    case 'G': st.selKey = lastRows[lastRows.length - 1].key; break;
+    case 'g': if (Date.now() - st.lastG < 500) st.selKey = lastRows[0].key; st.lastG = Date.now(); break;
+    case 'F': st.selKey = 's:' + st.focus; break;
+    case 'p': if (r && r.parentKey) st.selKey = r.parentKey; break;
+    case 'h': case 'ArrowLeft':
+      if (st.layout !== 'C' && r && r.s && kids(r.s).length && !st.collapsed.has(r.s.k)) st.collapsed.add(r.s.k);
+      else if (r && r.parentKey) st.selKey = r.parentKey; break;
+    case 'l': case 'ArrowRight':
+      if (st.layout !== 'C' && r && r.s && st.collapsed.has(r.s.k)) st.collapsed.delete(r.s.k);
+      else { const c = lastRows.find(x => x.parentKey === st.selKey); if (c) st.selKey = c.key; } break;
+    case '[': case ']': {
+      if (!r) break; const sib = lastRows.filter(x => x.parentKey === r.parentKey); const i = sib.indexOf(r);
+      const n = sib[i + (k === ']' ? 1 : -1)]; if (n) st.selKey = n.key; break; }
+    case 'Enter': case 't': if (narrow && k === 'Enter') st.overlay = 'details'; else { st.overlay = 'transcript'; st.tScroll = 0; } break;
+    case '?': st.overlay = 'help'; break;
+    case 'v': st.layout = { D: 'A', A: 'C', C: 'D', B: 'D' }[st.layout]; st.scroll = 0; break;
+    case 'f': if (s) { st.focus = s.k; st.selKey = 's:' + s.k; resetCollapse(); toast('focus → ' + s.k + ' (scope rebuilt)'); } break;
+    case 'r': if (s) toast(s.live ? s.k + ' is live in another codex; resume anyway? (demo)' : 'would run: codex resume ' + s.k + '  (TUI suspends)'); break;
+    case 'n': if (s) toast('would run: codex fork ' + s.k + ' → recorded edge'); break;
+    case 'a': st.show.arch = !st.show.arch; break;
+    case 'i': st.show.inf = !st.show.inf; break;
+    case 'x': if (s && s.prov === 'inferred') { st.confirmed.add(s.k); toast('confirmed ' + s.k + ' as a fork'); } else toast('x applies to inferred forks (≈)'); break;
+    case 'X': if (s && s.prov === 'inferred' && !st.confirmed.has(s.k)) { st.rejected.add(s.k); toast('rejected ' + s.k + ' · i shows it again'); } else toast('X applies to unconfirmed inferred forks'); break;
+    case 'z': resetCollapse(); break;
+    case 'Z': st.collapsed.clear(); break;
+    case 'y': if (s) toast('copied ' + s.id); break;
+    case 'R': toast('rename: inline field in details (demo)'); break;
+    case 'A': toast('archive ' + (s ? s.k : '') + '? y/n (demo)'); break;
+    case 'D': toast('delete: type “' + (s ? s.k.slice(0, 4) : '') + '” to confirm (demo)'); break;
+    case 'm': toast('marked ' + (s ? s.k : '') + ' · move and press c to compare'); break;
+    case 'c': toast('compare overlay: not in this demo'); break;
+    case 'q': case 'Escape': toast('q quits the real app'); break;
+    default: return false;
+  }
+  render(); return true;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('button, input, textarea, select') && e.target !== term) return;
+  if (e.metaKey || e.altKey) return;
+  if (e.ctrlKey && e.key === 'r') { e.preventDefault(); verify(); return; }
+  if (e.ctrlKey) return;
+  if (key(e.key, e)) e.preventDefault();
+});
+term.addEventListener('focus', () => { st.focused = true; render(); });
+term.addEventListener('blur', () => { st.focused = false; render(); });
+term.addEventListener('click', e => { const h = e.target.closest('[data-key]'); if (h) { st.selKey = h.dataset.key; render(); } term.focus(); });
+term.addEventListener('dblclick', e => { const h = e.target.closest('[data-key]'); if (h) { st.selKey = h.dataset.key; key('t'); } });
+document.querySelectorAll('.keys button').forEach(b => b.addEventListener('click', () => { st.focused = true; key(b.dataset.k); }));
+document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const v = b.dataset.v, c = seg.dataset.ctl;
+  if (c === 'size') { setSize(v); return; }
+  if (c === 'layout') { st.layout = v; st.scroll = 0; } else if (c === 'theme') st.theme = v;
+  try { localStorage.setItem('cft-demo3', JSON.stringify({ layout: st.layout, theme: st.theme })); } catch (_) {}
+  render();
+}));
+try { const saved = JSON.parse(localStorage.getItem('cft-demo3') || 'null'); if (saved) Object.assign(st, { layout: saved.layout, theme: saved.theme }); } catch (_) {}
+if (!'DAC'.includes(st.layout)) st.layout = 'D';
+if (st.theme !== 'light') st.theme = 'dark';
+
+// ---------- terminal size: measured from the box, like SIGWINCH ----------
+let cw = 8, lh = 18;
+function measure() {
+  const m = document.createElement('span'); m.className = 'measure'; m.textContent = 'M'.repeat(100);
+  term.appendChild(m); cw = m.getBoundingClientRect().width / 100; m.remove();
+  lh = parseFloat(getComputedStyle(term).fontSize) * 1.32;
+}
+const PAD_X = 24 + 2, PAD_Y = 20 + 2; // padding + border
+function fitSize() {
+  const cols = Math.max(1, Math.floor((term.clientWidth - 24) / cw) || 1);
+  const rows = Math.max(1, Math.floor((term.clientHeight - 20) / lh) || 1);
+  if (cols !== st.width || rows !== st.rows) { st.width = cols; st.rows = rows; render(); }
+}
+function setSize(v) {
+  if (v === 'fit') { term.style.width = '100%'; term.style.height = Math.ceil(30 * lh + PAD_Y) + 'px'; }
+  else { const [c, r] = v.split('x').map(Number); term.style.width = Math.ceil(c * cw + PAD_X + 1) + 'px'; term.style.height = Math.ceil(r * lh + PAD_Y) + 'px'; }
+  fitSize();
+}
+measure(); setSize('fit');
+if (window.ResizeObserver) new ResizeObserver(fitSize).observe(term);
+window.addEventListener('resize', fitSize);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); fitSize(); });
+if (!reduce) setInterval(() => { if (st.verifying) { st.spin++; render(); } }, 90);
+render();
+verify();
+})();
+</script>
