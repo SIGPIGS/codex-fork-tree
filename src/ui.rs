@@ -30,9 +30,9 @@ const HELP: &[(&str, &str)] = &[
     ("y Y", "copy id · copy path"),
     ("< >", "narrow / widen tree pane"),
     ("Ctrl-r", "re-index now"),
-    ("esc o Tab", "back to all trees (project overview)"),
+    ("esc o Tab", "back to all trees (or click ‹ all trees)"),
     ("=", "comfortable / compact spacing"),
-    ("mouse", "wheel moves · click selects · double-click focuses / opens · click ‹ all trees"),
+    ("mouse", "wheel · click selects · double-click focuses"),
     ("q", "quit (esc closes an overlay first)"),
 ];
 
@@ -639,7 +639,8 @@ fn draw_overview(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
             let target_key = crate::layout::Key::Session(app.graph.sessions[e.target].id.clone());
             let at = tree.iter().position(|r| r.key.as_ref() == Some(&target_key)).unwrap_or(0);
             let room = ph.saturating_sub(2);
-            let start = at.saturating_sub(room / 2).min(tree.len().saturating_sub(room));
+            // show the tree from its root when the target fits; otherwise center the target
+            let start = if at < room { 0 } else { at.saturating_sub(room / 2).min(tree.len().saturating_sub(room)) };
             let mut lines = vec![(pad1(overview::opens_at(&view, e, pw - 1)), false), (vec![], false)];
             lines.extend(tree.iter().skip(start).take(room).map(|r| (pad1(r.line.clone()), r.key.as_ref() == Some(&target_key))));
             put(f, &theme, Rect::new(px, py, pw as u16, ph as u16), lines);
