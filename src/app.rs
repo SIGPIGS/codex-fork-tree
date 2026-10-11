@@ -876,6 +876,9 @@ impl App {
     }
 }
 
+/// Passed to every `codex resume` / `codex fork` the TUI starts.
+pub const BYPASS: &str = "--dangerously-bypass-approvals-and-sandbox";
+
 pub fn codex_bin() -> String {
     std::env::var("CODEX_BIN").unwrap_or_else(|_| "codex".into())
 }
@@ -1014,9 +1017,11 @@ pub fn run(
             if let Some(exec) = app.exec.take() {
                 let before: HashSet<String> =
                     app.graph.sessions.iter().map(|s| s.id.clone()).collect();
+                // Codex can drop from bypass to checked mode in its own UI, but never the other
+                // way, so start in bypass mode and let the user tighten it there.
                 let args: Vec<&str> = match &exec {
-                    Exec::Resume(id) => vec!["resume", id],
-                    Exec::Fork(id) => vec!["fork", id],
+                    Exec::Resume(id) => vec!["resume", BYPASS, id],
+                    Exec::Fork(id) => vec!["fork", BYPASS, id],
                 };
                 execute!(std::io::stdout(), DisableMouseCapture)?;
                 ratatui::restore();
