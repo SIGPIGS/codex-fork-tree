@@ -36,6 +36,8 @@ pub enum Overlay {
         t: Transcript,
         width: usize,
         scroll: usize,
+        /// Selected turn (0-based); y / Y copy its prompt / reply.
+        turn: usize,
     },
     ConfirmArchive {
         id: String,
@@ -91,6 +93,8 @@ pub struct App {
     pub hit_list_rows: Vec<Option<usize>>,
     /// The clickable "‹ all trees" in the tree header.
     pub hit_back: Option<Rect>,
+    /// The full-width body area (transcript), for mouse hit-testing.
+    pub hit_body: Option<Rect>,
     last_click: Option<(Instant, u16, u16)>,
     /// A tree has been opened, so Esc in the overview returns to it.
     pub has_tree: bool,
@@ -282,9 +286,21 @@ impl App {
         }
         match &mut self.overlay {
             Overlay::None | Overlay::Help { .. } => {}
-            Overlay::Transcript { t, scroll, .. } => {
+            Overlay::Transcript { t, scroll, turn, .. } => {
                 let page = self.body_height.saturating_sub(2).max(1);
                 let max = t.lines.len().saturating_sub(self.body_height.max(1));
+                let body = self.body_height.max(1);
+                // move the turn selection and bring the whole turn into view
+                let select = |to: usize, turn: &mut usize, scroll: &mut usize| {
+                    if t.turns.is_empty() {
+                        return;
+                    }
+                    *turn = to.min(t.turns.len() - 1);
+                    let (a, b) = (t.turn_lines[*turn], t.turn_ends[*turn]);
+                    if a < *scroll || b > *scroll + body {
+                        *scroll = a.saturating_sub(1).min(max);
+                    }
+                };
                 match k.code {
                     KeyCode::Esc | KeyCode::Char('q') => self.overlay = Overlay::None,
                     KeyCode::Char('j') | KeyCode::Down => *scroll = (*scroll + 1).min(max),
@@ -295,14 +311,22 @@ impl App {
                     KeyCode::PageUp => *scroll = scroll.saturating_sub(page),
                     KeyCode::Char('G') | KeyCode::End => *scroll = max,
                     KeyCode::Char('g') | KeyCode::Home => *scroll = 0,
-                    KeyCode::Char('}') => {
-                        if let Some(&n) = t.turn_lines.iter().find(|&&l| l > *scroll) {
-                            *scroll = n.min(max);
-                        }
+                    KeyCode::Char('}') | KeyCode::Char(']') | KeyCode::Tab => {
+                        select(*turn + 1, turn, scroll)
                     }
-                    KeyCode::Char('{') => {
-                        if let Some(&n) = t.turn_lines.iter().rev().find(|&&l| l < *scroll) {
-                            *scroll = n;
+                    KeyCode::Char('{') | KeyCode::Char('[') | KeyCode::BackTab => {
+                        select(turn.saturating_sub(1), turn, scroll)
+                    }
+                    KeyCode::Char('y') | KeyCode::Char('Y') => {
+                        if let Some((user, agent)) = t.turns.get(*turn) {
+                            let (what, text) = if k.code == KeyCode::Char('y') {
+                                ("prompt", user.clone())
+                            } else {
+                                ("reply", agent.clone())
+                            };
+                            let n = *turn + 1;
+                            let how = copy_to_clipboard(&text);
+                            self.toast(format!("copied {what} of turn {n} · {} chars · {how}", text.chars().count()), Role::Accent);
                         }
                     }
                     KeyCode::Char('r') | KeyCode::Char('n') => {
@@ -502,7 +526,7 @@ impl App {
                     } else {
                         self.graph.sessions[s].path.display().to_string()
                     };
-                    osc52(&text);
+                    copy_to_clipboard(&text);
                     self.toast(format!("copied {text}"), Role::Accent);
                 }
             }
@@ -593,9 +617,16 @@ impl App {
                 *scroll = step(*scroll, wheel, usize::MAX / 2);
                 return;
             }
-            Overlay::Transcript { t, scroll, .. } => {
+            Overlay::Transcript { t, scroll, turn, .. } => {
                 let max = t.lines.len().saturating_sub(self.body_height.max(1));
                 *scroll = step(*scroll, wheel, max);
+                // a click selects the turn under the pointer
+                if click {
+                    let hit = self.hit_body.filter(|r| inside(*r)).and_then(|r| t.turn_at(*scroll + (row - r.y) as usize));
+                    if let Some(i) = hit {
+                        *turn = i;
+                    }
+                }
                 return;
             }
             Overlay::Details => {
@@ -757,6 +788,7 @@ impl App {
             width,
             scroll,
             t,
+            turn,
         } = &self.overlay
         else {
             return;
@@ -764,7 +796,7 @@ impl App {
         if *width == w {
             return;
         }
-        let (id, frac) = (id.clone(), *scroll as f64 / t.lines.len().max(1) as f64);
+        let (id, frac, turn) = (id.clone(), *scroll as f64 / t.lines.len().max(1) as f64, *turn);
         let Some(&s) = self.graph.by_id.get(&id) else {
             return;
         };
@@ -778,6 +810,7 @@ impl App {
             t,
             width: w,
             scroll,
+            turn,
         };
     }
 
@@ -791,11 +824,14 @@ impl App {
         let parent_title = self.graph.parent(s).map(|p| view.base_title(p));
         let t = transcript::build(&self.graph, s, &title, parent_title.as_deref(), width);
         let scroll = t.fork_line.saturating_sub(2);
+        // start on the first turn after the fork point (the session's own first prompt)
+        let turn = self.graph.fork_k(s).min(t.turns.len().saturating_sub(1));
         self.overlay = Overlay::Transcript {
             id: self.graph.sessions[s].id.clone(),
             t,
             width,
             scroll,
+            turn,
         };
     }
 
@@ -883,6 +919,39 @@ pub fn codex_bin() -> String {
     std::env::var("CODEX_BIN").unwrap_or_else(|_| "codex".into())
 }
 
+/// Copy to the system clipboard: a local clipboard tool when one is available, and always OSC 52,
+/// which reaches the clipboard of the terminal you are sitting at (also over SSH and in tmux with
+/// `set-clipboard on`). Returns how it was copied, for the toast.
+fn copy_to_clipboard(text: &str) -> &'static str {
+    osc52(text);
+    let tools: &[(&str, &[&str], bool)] = &[
+        ("wl-copy", &[], std::env::var_os("WAYLAND_DISPLAY").is_some()),
+        ("xclip", &["-selection", "clipboard"], std::env::var_os("DISPLAY").is_some()),
+        ("xsel", &["--clipboard", "--input"], std::env::var_os("DISPLAY").is_some()),
+        ("pbcopy", &[], cfg!(target_os = "macos")),
+    ];
+    for (bin, args, usable) in tools {
+        if !usable {
+            continue;
+        }
+        let child = Command::new(bin)
+            .args(*args)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        if let Ok(mut c) = child {
+            if let Some(mut stdin) = c.stdin.take() {
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            if c.wait().is_ok_and(|s| s.success()) {
+                return bin;
+            }
+        }
+    }
+    "OSC 52"
+}
+
 fn osc52(text: &str) {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let b = text.as_bytes();
@@ -967,6 +1036,7 @@ pub fn run(
         hit_list: None,
         hit_list_rows: vec![],
         hit_back: None,
+        hit_body: None,
         last_click: None,
         has_tree: !overview,
     };

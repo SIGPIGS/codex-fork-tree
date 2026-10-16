@@ -181,6 +181,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     app.hit_tree = None;
     app.hit_list = None;
     app.hit_back = None;
+    app.hit_body = None;
     if matches!(app.overlay, Overlay::Help { .. }) {
         draw_help(f, app, area, &theme);
         return;
@@ -312,17 +313,23 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     // ---- overlays that replace the body ----
     let full_overlay = match &mut app.overlay {
-        Overlay::Transcript { t, scroll, .. } => {
+        Overlay::Transcript { t, scroll, turn, .. } => {
             let max = t.lines.len().saturating_sub(body_h.max(1));
             *scroll = (*scroll).min(max);
+            let (a, b) = (
+                t.turn_lines.get(*turn).copied().unwrap_or(0),
+                t.turn_ends.get(*turn).copied().unwrap_or(0),
+            );
             let lines = t
                 .lines
                 .iter()
+                .enumerate()
                 .skip(*scroll)
                 .take(body_h)
-                .map(|l| (fit(l.clone(), w), false))
+                .map(|(i, l)| (fit(l.clone(), w), i >= a && i < b))
                 .collect();
             put(f, &theme, body, lines);
+            app.hit_body = Some(body);
             true
         }
         Overlay::Details if narrow => {
@@ -477,10 +484,12 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, w: usize, theme: &Theme) {
         ],
         _ => {
             let hints: Line = if matches!(app.overlay, Overlay::Transcript { .. }) {
-                vec![seg(
-                    " j/k scroll  {/} user turn  r resume  n fork  esc close",
-                    Role::Dim,
-                )]
+                let mut v = vec![];
+                for (k, d) in [("j/k", " scroll  "), ("{ }", " select turn  "), ("y", " copy prompt  "), ("Y", " copy reply  "), ("esc", " close")] {
+                    v.push(seg(if v.is_empty() { format!(" {k}") } else { k.to_string() }, Role::Accent));
+                    v.push(seg(d, Role::Fg));
+                }
+                v
             } else {
                 let mut v = vec![];
                 for (k, d) in [

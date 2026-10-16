@@ -11,6 +11,17 @@ pub struct Transcript {
     pub fork_line: usize,
     /// Line index of every "you · turn N" header, for `{` / `}`.
     pub turn_lines: Vec<usize>,
+    /// End (exclusive) of each turn's text lines, parallel to `turn_lines`.
+    pub turn_ends: Vec<usize>,
+    /// Full prompt and reply of each turn, for copying.
+    pub turns: Vec<(String, String)>,
+}
+
+impl Transcript {
+    /// The turn whose lines contain `line`, if any.
+    pub fn turn_at(&self, line: usize) -> Option<usize> {
+        (0..self.turn_lines.len()).find(|&i| line >= self.turn_lines[i] && line < self.turn_ends[i])
+    }
 }
 
 pub fn build(g: &Graph, s: usize, title: &str, parent_title: Option<&str>, w: usize) -> Transcript {
@@ -26,6 +37,8 @@ pub fn build(g: &Graph, s: usize, title: &str, parent_title: Option<&str>, w: us
     let k = g.fork_k(s);
     let mut lines: Vec<Line> = vec![];
     let mut turn_lines = vec![];
+    let mut turn_ends = vec![];
+    let mut turns = vec![];
     let mut fork_line = 0;
     const INDENT: usize = 17; // "   you   turn 12 " / "   codex         "
     let text_w = w.saturating_sub(INDENT + 1);
@@ -104,6 +117,8 @@ pub fn build(g: &Graph, s: usize, title: &str, parent_title: Option<&str>, w: us
                 lines.push(fit(vec![head, seg(x, text_role)], w));
             }
         }
+        turn_ends.push(lines.len());
+        turns.push((user, agent));
         lines.push(vec![]);
         if n == k {
             fork_line = lines.len();
@@ -123,5 +138,7 @@ pub fn build(g: &Graph, s: usize, title: &str, parent_title: Option<&str>, w: us
         lines,
         fork_line,
         turn_lines,
+        turn_ends,
+        turns,
     }
 }
